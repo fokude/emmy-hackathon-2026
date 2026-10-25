@@ -161,8 +161,8 @@ def emit_assign(assign, reg_alloc: RegisterAllocator) -> list[str]:
     ptx_type, reg_kind = DTYPE_INFO[assign.dtype.name]
     operands = [reg_alloc.lookup(arg) for arg in assign.args]
     result_reg = reg_alloc.new_reg(reg_kind)
-    instruction = ELEMENTWISE_OPS[assign.op.name]
-    line = f"{INDENT}{instruction}{ptx_type} {result_reg}, {', '.join(operands)};"
+    instruction, extra_operands = ELEMENTWISE_OPS[assign.op.name]
+    line = f"{INDENT}{instruction}{ptx_type} {result_reg}, {', '.join(operands + extra_operands)};"
     reg_alloc.bind(assign.name, result_reg)
     return [line]
 

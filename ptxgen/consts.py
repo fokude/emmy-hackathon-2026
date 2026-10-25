@@ -28,8 +28,12 @@ BINARY_OPS = {"+": "add", "*": "mul.lo"}
 MULTIPLY_WIDE = "mul.wide"
 ADD = "add"
 
-# IR elementwise op name -> PTX instruction
-ELEMENTWISE_OPS = {"add": "add", "multiply": "mul"}
+# IR elementwise op name -> (PTX instruction, extra constant operands)
+ELEMENTWISE_OPS = {
+    "add": ("add", []),
+    "multiply": ("mul", []),
+    "relu": ("max", ["0f00000000"]),
+}
 MULTIPLY_ADD = "mad"
 SET_PREDICATE = "setp"
 BRANCH = "bra"

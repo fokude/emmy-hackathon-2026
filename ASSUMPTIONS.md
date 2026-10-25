@@ -17,3 +17,4 @@ where the code relies on it, so a violation fails loudly instead of producing wr
 | 10 | `Load` and `Write` indices have exactly one expression (1-D tensors) | `emit_load`, `emit_write` | `assert len(load.index) == 1` in `emit_load` (`emit_write` likewise) |
 | 11 | A `Load` defines exactly one value (no vector loads) | `emit_load` | `assert len(load.names) == 1` |
 | 12 | A `Write` stores 2 or 4 values (vector store, no scalar store) | `emit_write` | `assert len(write.values) in (2, 4)` |
+| 13 | Inputs contain no NaN, because `max.f32` returns the non-NaN operand so `relu(NaN)` becomes 0 where PyTorch keeps NaN | `ELEMENTWISE_OPS` (`relu`) | not checkable at compile time |

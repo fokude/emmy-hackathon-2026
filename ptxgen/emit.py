@@ -8,8 +8,6 @@ from ptxgen.consts import (
     ENTRY,
     PARAM,
     PARAM_PREFIX,
-    TAB_SPACE,
-    SPACE_CHAR,
     REG_DECL_TYPES,
     MOVE,
     LOAD,
@@ -75,13 +73,14 @@ def emit_kernel_body(graph: Graph, kernel: dict, reg_alloc: RegisterAllocator) -
         *emit_param_loads(kernel, reg_alloc),
         *emit_statements(tile, reg_alloc),
         f"{DONE_LABEL}:",
-        f"{SPACE_CHAR * TAB_SPACE}ret;",
+        f"{INDENT}ret;",
     ]
 
 def emit_reg_decls(reg_alloc: RegisterAllocator) -> list[str]:
     """Return one .reg line per register kind the allocator handed out."""
     return [
-        f"{SPACE_CHAR * TAB_SPACE}.reg {REG_DECL_TYPES[kind]} %{kind}<{count}>;" for kind, count in reg_alloc.counts().items()
+        f"{INDENT}.reg {REG_DECL_TYPES[kind]} %{kind}<{count}>;"
+        for kind, count in reg_alloc.counts().items()
     ]
 
 def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
@@ -95,7 +94,7 @@ def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
     for idx, arg_name in enumerate(arg_names):
         arg = arg_dict[arg_name]
         comma = "," if idx < len(arg_names) - 1 else ""
-        param_line = f"{SPACE_CHAR * TAB_SPACE} {PARAM} {PtxType.U64} {PARAM_PREFIX + arg["name"]}{comma}"
+        param_line = f"{INDENT}{PARAM} {PtxType.U64} {PARAM_PREFIX}{arg_name}{comma}"
         param_lines.append(param_line)
     return param_lines
 
@@ -203,7 +202,6 @@ def emit_prologue(tile, reg_alloc):
     """
     assert(len(tile.axes) == 1)
 
-    indent = SPACE_CHAR * TAB_SPACE
     block_id_reg = reg_alloc.new_reg('r')
     num_threads_reg = reg_alloc.new_reg('r')
     thread_id_reg = reg_alloc.new_reg('r')
@@ -216,10 +214,10 @@ def emit_prologue(tile, reg_alloc):
     reg_alloc.bind(axis.name, gid_reg)
 
     return [
-        f"{indent}{MOVE}{PtxType.U32} {block_id_reg}, %ctaid.x;",
-        f"{indent}{MOVE}{PtxType.U32} {num_threads_reg}, %ntid.x;",
-        f"{indent}{MOVE}{PtxType.U32} {thread_id_reg}, %tid.x;",
-        f"{indent}{MULTIPLY_ADD}.{LOWER_BITS}{PtxType.U32} {gid_reg}, {block_id_reg}, {num_threads_reg}, {thread_id_reg};",
-        f"{indent}{SET_PREDICATE}.{GREATER_EQUALS}{PtxType.U32} {thread_boundary_reg}, {gid_reg}, {tile.axes[0].extent.as_static()};",
-        f"{indent}@{thread_boundary_reg} {BRANCH} {DONE_LABEL};",
+        f"{INDENT}{MOVE}{PtxType.U32} {block_id_reg}, %ctaid.x;",
+        f"{INDENT}{MOVE}{PtxType.U32} {num_threads_reg}, %ntid.x;",
+        f"{INDENT}{MOVE}{PtxType.U32} {thread_id_reg}, %tid.x;",
+        f"{INDENT}{MULTIPLY_ADD}.{LOWER_BITS}{PtxType.U32} {gid_reg}, {block_id_reg}, {num_threads_reg}, {thread_id_reg};",
+        f"{INDENT}{SET_PREDICATE}.{GREATER_EQUALS}{PtxType.U32} {thread_boundary_reg}, {gid_reg}, {tile.axes[0].extent.as_static()};",
+        f"{INDENT}@{thread_boundary_reg} {BRANCH} {DONE_LABEL};",
     ]

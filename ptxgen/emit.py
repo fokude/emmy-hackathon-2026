@@ -7,14 +7,27 @@ from ptxgen.consts import (
     U64_TYPE,
     TAB_SPACE,
     SPACE_CHAR,
+    REG_DECL_TYPES,
 )
+from ptxgen.regs import RegisterAllocator
 
 def emit_graph(graph: Graph, metadata: dict) -> list[str]:
     lines = []
     for kernel in metadata["kernels"]:
-        lines += emit_kernel_signature(kernel)
-        lines += emit_kernel_body(graph)
+        lines += emit_kernel(graph, kernel)
     return lines
+
+def emit_kernel(graph: Graph, kernel: dict) -> list[str]:
+    reg_alloc = RegisterAllocator()
+    # run emit_kernel body instead of inline with returns so register allocator can be populated before emiting register declarations
+    body = emit_kernel_body(graph, reg_alloc)
+    return [
+        *emit_kernel_signature(kernel),
+        "{",
+        *emit_reg_decls(reg_alloc),
+        *body,
+        "}",
+    ]
 
 def emit_kernel_signature(kernel: dict) -> list[str]:
     entry_name = kernel["entry"]
@@ -27,8 +40,14 @@ def emit_kernel_signature(kernel: dict) -> list[str]:
         ")",
     ]
 
-def emit_kernel_body(graph: Graph) -> list[str]:
-    return ["{", "}"]
+def emit_kernel_body(graph: Graph, regs: RegisterAllocator) -> list[str]:
+    return []
+
+def emit_reg_decls(regs: RegisterAllocator) -> list[str]:
+    return [
+        f"{SPACE_CHAR * TAB_SPACE}.reg {REG_DECL_TYPES[kind]} %{kind}<{count}>;"
+        for kind, count in regs.counts().items()
+    ]
 
 def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
     # ask if metadata is guaranteed to always have same num args as arg order, and if args in args will be in same order as arg order..

@@ -3,7 +3,7 @@
 # --- directives ---
 VISIBLE = ".visible"
 ENTRY = ".entry"
-PARAM_DECLARATION = ".param"
+PARAM = ".param"
 
 # --- types ---
 U64_TYPE = ".u64"
@@ -19,6 +19,8 @@ REG_DECL_TYPES = {
 
 # --- operations ---
 MOVE = "mov"
+LOAD = "ld"
+CONVERT_ADDRESS = "cvta"
 MULTIPLY_ADD = "mad"
 SET_PREDICATE = "setp"
 BRANCH = "bra"
@@ -28,9 +30,10 @@ LOWER_BITS = "lo"
 GREATER_EQUALS = "ge"
 
 # --- symbol names (identifiers we create in the PTX) ---
-PARAM_PREFIX = PARAM_DECLARATION[1:] + "_"
+PARAM_PREFIX = PARAM[1:] + "_"
 DONE_LABEL = "DONE"
 
 # --- formatting ---
 TAB_SPACE = 2
 SPACE_CHAR = ' '
+INDENT = SPACE_CHAR * TAB_SPACE

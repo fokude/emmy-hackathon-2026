@@ -4,7 +4,7 @@ from emmy.compiler.graph import Graph
 from ptxgen.consts import (
     VISIBLE,
     ENTRY,
-    PARAM_DECLARATION,
+    PARAM,
     PARAM_PREFIX,
     U64_TYPE,
     TAB_SPACE,
@@ -12,6 +12,9 @@ from ptxgen.consts import (
     REG_DECL_TYPES,
     U32_TYPE,
     MOVE,
+    LOAD,
+    CONVERT_ADDRESS,
+    INDENT,
     DONE_LABEL,
     SET_PREDICATE,
     GREATER_EQUALS,
@@ -62,6 +65,7 @@ def emit_kernel_body(graph: Graph, kernel: dict, reg_alloc: RegisterAllocator) -
     tile = graph.nodes[kernel["node"]].op.body[0]
     return [
         *emit_prologue(tile, reg_alloc),
+        *emit_param_loads(kernel, reg_alloc),
         f"{DONE_LABEL}:",
         f"{SPACE_CHAR * TAB_SPACE}ret;",
     ]
@@ -83,9 +87,21 @@ def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
     for idx, arg_name in enumerate(arg_names):
         arg = arg_dict[arg_name]
         comma = "," if idx < len(arg_names) - 1 else ""
-        param_line = f"{SPACE_CHAR * TAB_SPACE} {PARAM_DECLARATION} {U64_TYPE} {PARAM_PREFIX + arg["name"]}{comma}"
+        param_line = f"{SPACE_CHAR * TAB_SPACE} {PARAM} {U64_TYPE} {PARAM_PREFIX + arg["name"]}{comma}"
         param_lines.append(param_line)
     return param_lines
+
+
+def emit_param_loads(kernel: dict, reg_alloc: RegisterAllocator) -> list[str]:
+    """Return the lines that load each argument's address into a global-space register."""
+    lines = []
+    for arg_name in kernel["arg_order"]:
+        param_reg = reg_alloc.new_reg('rd')
+        global_reg = reg_alloc.new_reg('rd')
+        lines.append(f"{INDENT}{LOAD}{PARAM}{U64_TYPE} {param_reg}, [{PARAM_PREFIX}{arg_name}];")
+        lines.append(f"{INDENT}{CONVERT_ADDRESS}.to.global{U64_TYPE} {global_reg}, {param_reg};")
+        reg_alloc.bind_tensor(arg_name, global_reg)
+    return lines
 
 
 def emit_prologue(tile, reg_alloc):
@@ -101,6 +117,11 @@ def emit_prologue(tile, reg_alloc):
     thread_id_reg = reg_alloc.new_reg('r')
     gid_reg = reg_alloc.new_reg('r')
     thread_boundary_reg = reg_alloc.new_reg('p')
+
+    axis = tile.axes[0]
+    # Emmy's Tile runs one thread per axis value, so the axis variable (a0)
+    # is the global thread id. Record that for the body's index expressions.
+    reg_alloc.bind(axis.name, gid_reg)
 
     return [
         f"{indent}{MOVE}{U32_TYPE} {block_id_reg}, %ctaid.x;",

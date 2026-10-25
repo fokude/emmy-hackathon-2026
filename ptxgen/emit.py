@@ -1,3 +1,4 @@
+from emmy.compiler.graph import Graph
 from ptxgen.consts import (
     VISIBLE,
     ENTRY,
@@ -8,36 +9,37 @@ from ptxgen.consts import (
     SPACE_CHAR,
 )
 
-def emit_graph(graph, metadata):
+def emit_graph(graph: Graph, metadata: dict) -> list[str]:
+    lines = []
     for kernel in metadata["kernels"]:
-        emit_kernel_signature(kernel)
-        emit_kernel_body(graph)
+        lines += emit_kernel_signature(kernel)
+        lines += emit_kernel_body(graph)
+    return lines
 
-def emit_kernel_signature(kernel):
+def emit_kernel_signature(kernel: dict) -> list[str]:
     entry_name = kernel["entry"]
     arg_names = kernel["arg_order"]
 
-    print(f"""
-{VISIBLE} {ENTRY} {entry_name}(
-{format_params(arg_names, kernel)}
-)
-    """)
+    return [
+        "",
+        f"{VISIBLE} {ENTRY} {entry_name}(",
+        *emit_params(arg_names, kernel),
+        ")",
+    ]
 
-def emit_kernel_body(graph):
-    print(f"""
-{{
-}}
-    """)
+def emit_kernel_body(graph: Graph) -> list[str]:
+    return ["{", "}"]
 
-def format_params(arg_names, kernel):
+def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
     # ask if metadata is guaranteed to always have same num args as arg order, and if args in args will be in same order as arg order..
     arg_dict = {}
     for arg in kernel["args"]:
         arg_dict[arg["name"]] = arg
 
-    param_strings = []
+    param_lines = []
     for idx, arg_name in enumerate(arg_names):
         arg = arg_dict[arg_name]
-        param_string = f"{SPACE_CHAR * TAB_SPACE} {PARAM_DECLARATION} {U64_TYPE} {PARAM_PREFIX + arg["name"]}"
-        param_strings.append(param_string)
-    return ', \n'.join(param_strings)
+        comma = "," if idx < len(arg_names) - 1 else ""
+        param_line = f"{SPACE_CHAR * TAB_SPACE} {PARAM_DECLARATION} {U64_TYPE} {PARAM_PREFIX + arg["name"]}{comma}"
+        param_lines.append(param_line)
+    return param_lines

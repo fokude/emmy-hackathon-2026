@@ -8,7 +8,7 @@ def main():
     ir_data, metadata = parse_args()
     print_header()
     problem_graph = Graph.from_dict(ir_data)
-    emit_graph(problem_graph, metadata)
+    print("\n".join(emit_graph(problem_graph, metadata)))
 
 def parse_args():
     if len(sys.argv) < 2:

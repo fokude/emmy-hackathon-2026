@@ -1,0 +1,8 @@
+VISIBLE = ".visible"
+ENTRY = ".entry"
+PARAM_DECLARATION = ".param"
+PARAM_PREFIX = PARAM_DECLARATION[1:] + "_"
+
+U64_TYPE = ".u64"
+TAB_SPACE = 2
+SPACE_CHAR = ' '

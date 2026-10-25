@@ -1,12 +1,11 @@
+# --- directives ---
 VISIBLE = ".visible"
 ENTRY = ".entry"
 PARAM_DECLARATION = ".param"
-PARAM_PREFIX = PARAM_DECLARATION[1:] + "_"
 
+# --- types ---
 U64_TYPE = ".u64"
 U32_TYPE = ".u32"
-TAB_SPACE = 2
-SPACE_CHAR = ' '
 
 # register kind (see regs.RegType) -> type used in the .reg declaration
 REG_DECL_TYPES = {
@@ -16,10 +15,20 @@ REG_DECL_TYPES = {
     "rd": ".b64",
 }
 
+# --- operations ---
 MOVE = "mov"
 MULTIPLY_ADD = "mad"
-LOWER_BITS = "lo"
-DONE_LABEL = "DONE"
 SET_PREDICATE = "setp"
-GREATER_EQUALS = "ge"
 BRANCH = "bra"
+
+# --- operation modifiers ---
+LOWER_BITS = "lo"
+GREATER_EQUALS = "ge"
+
+# --- symbol names (identifiers we create in the PTX) ---
+PARAM_PREFIX = PARAM_DECLARATION[1:] + "_"
+DONE_LABEL = "DONE"
+
+# --- formatting ---
+TAB_SPACE = 2
+SPACE_CHAR = ' '

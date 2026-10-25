@@ -5,6 +5,7 @@ from ptxgen.types import PtxType
 VISIBLE = ".visible"
 ENTRY = ".entry"
 PARAM = ".param"
+GLOBAL = ".global"
 
 # --- types ---
 
@@ -19,12 +20,16 @@ REG_DECL_TYPES = {
 # --- operations ---
 MOVE = "mov"
 LOAD = "ld"
+STORE = "st"
 CONVERT_ADDRESS = "cvta"
 
 # IR index operator -> PTX instruction
 BINARY_OPS = {"+": "add", "*": "mul.lo"}
 MULTIPLY_WIDE = "mul.wide"
 ADD = "add"
+
+# IR elementwise op name -> PTX instruction
+ELEMENTWISE_OPS = {"add": "add", "multiply": "mul"}
 MULTIPLY_ADD = "mad"
 SET_PREDICATE = "setp"
 BRANCH = "bra"

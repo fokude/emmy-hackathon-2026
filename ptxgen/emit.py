@@ -8,6 +8,14 @@ from ptxgen.consts import (
     TAB_SPACE,
     SPACE_CHAR,
     REG_DECL_TYPES,
+    U32_TYPE,
+    MOVE,
+    DONE_LABEL,
+    SET_PREDICATE,
+    GREATER_EQUALS,
+    BRANCH,
+    MULTIPLY_ADD,
+    LOWER_BITS,
 )
 from ptxgen.regs import RegisterAllocator
 
@@ -20,7 +28,7 @@ def emit_graph(graph: Graph, metadata: dict) -> list[str]:
 def emit_kernel(graph: Graph, kernel: dict) -> list[str]:
     reg_alloc = RegisterAllocator()
     # run emit_kernel body instead of inline with returns so register allocator can be populated before emiting register declarations
-    body = emit_kernel_body(graph, reg_alloc)
+    body = emit_kernel_body(graph, kernel, reg_alloc)
     return [
         *emit_kernel_signature(kernel),
         "{",
@@ -40,13 +48,17 @@ def emit_kernel_signature(kernel: dict) -> list[str]:
         ")",
     ]
 
-def emit_kernel_body(graph: Graph, regs: RegisterAllocator) -> list[str]:
-    return []
-
-def emit_reg_decls(regs: RegisterAllocator) -> list[str]:
+def emit_kernel_body(graph: Graph, kernel: dict, reg_alloc: RegisterAllocator) -> list[str]:
+    tile = graph.nodes[kernel["node"]].op.body[0]
     return [
-        f"{SPACE_CHAR * TAB_SPACE}.reg {REG_DECL_TYPES[kind]} %{kind}<{count}>;"
-        for kind, count in regs.counts().items()
+        *emit_prologue(tile, reg_alloc),
+        f"{DONE_LABEL}:",
+        f"{SPACE_CHAR * TAB_SPACE}ret;",
+    ]
+
+def emit_reg_decls(reg_alloc: RegisterAllocator) -> list[str]:
+    return [
+        f"{SPACE_CHAR * TAB_SPACE}.reg {REG_DECL_TYPES[kind]} %{kind}<{count}>;" for kind, count in reg_alloc.counts().items()
     ]
 
 def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
@@ -62,3 +74,23 @@ def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
         param_line = f"{SPACE_CHAR * TAB_SPACE} {PARAM_DECLARATION} {U64_TYPE} {PARAM_PREFIX + arg["name"]}{comma}"
         param_lines.append(param_line)
     return param_lines
+
+
+def emit_prologue(tile, reg_alloc):
+    assert(len(tile.axes) == 1)
+
+    indent = SPACE_CHAR * TAB_SPACE
+    block_id_reg = reg_alloc.new_reg('r')
+    num_threads_reg = reg_alloc.new_reg('r')
+    thread_id_reg = reg_alloc.new_reg('r')
+    gid_reg = reg_alloc.new_reg('r')
+    thread_boundary_reg = reg_alloc.new_reg('p')
+
+    return [
+        f"{indent}{MOVE}{U32_TYPE} {block_id_reg}, %ctaid.x;",
+        f"{indent}{MOVE}{U32_TYPE} {num_threads_reg}, %ntid.x;",
+        f"{indent}{MOVE}{U32_TYPE} {thread_id_reg}, %tid.x;",
+        f"{indent}{MULTIPLY_ADD}.{LOWER_BITS}{U32_TYPE} {gid_reg}, {block_id_reg}, {num_threads_reg}, {thread_id_reg};",
+        f"{indent}{SET_PREDICATE}.{GREATER_EQUALS}{U32_TYPE} {thread_boundary_reg}, {gid_reg}, {tile.axes[0].extent.as_static()};",
+        f"{indent}@{thread_boundary_reg} {BRANCH} {DONE_LABEL};",
+    ]

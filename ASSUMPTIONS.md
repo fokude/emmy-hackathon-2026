@@ -6,14 +6,14 @@ where the code relies on it, so a violation fails loudly instead of producing wr
 | # | Assumption | Where it is relied on | Checked |
 |---|---|---|---|
 | 1 | `meta.json` sits next to the IR file and lists every kernel to compile | `compile.py` `parse_args` | file read errors exit with a message |
-| 2 | Each `args` entry in `meta.json` has a name listed in `arg_order` | `ptxgen/emit.py` `emit_params` | not yet asserted |
-| 3 | Every kernel argument is a buffer pointer, declared `.u64` | `emit_params` | not yet asserted |
-| 4 | A kernel node's body starts with one `Tile` | `emit_kernel_body` | not yet asserted |
+| 2 | Each `args` entry in `meta.json` has a name listed in `arg_order` | `ptxgen/emit.py` `emit_params` | `assert set(arg_dict) == set(arg_names)` |
+| 3 | Every kernel argument is a buffer pointer, declared `.u64` | `emit_params` | not checkable: `meta.json` has no scalar marker |
+| 4 | A kernel node's body starts with one `Tile` | `emit_kernel_body` | `assert len(body) == 1 and isinstance(body[0], Tile)` |
 | 5 | A `Tile` has exactly one axis | `emit_prologue` | `assert len(tile.axes) == 1` |
 | 6 | The axis extent is a static integer | `emit_prologue` | `Dim.as_static()` raises `TypeError` |
-| 7 | The launch is one-dimensional (`ctaid.x`, `ntid.x`, `tid.x`) | `emit_prologue` | not yet asserted |
-| 8 | Every dtype is `f32` | statement emitters (not written yet) | to be asserted |
-| 9 | The tile is the scalar tier (`block_threads` is `None`), so the axis variable equals the global thread id | `emit_prologue` | not yet asserted |
+| 7 | The launch is one-dimensional (`ctaid.x`, `ntid.x`, `tid.x`) | `emit_prologue` | `assert` on `grid` and `block` in `emit_kernel` |
+| 8 | Every dtype is `f32` | `emit_load`, `emit_assign`, `emit_write` | `DTYPE_INFO[...]` raises `KeyError` on any other dtype |
+| 9 | The tile is the scalar tier (`block_threads` is `None`), so the axis variable equals the global thread id | `emit_prologue` | `assert tile.block_threads is None` |
 | 10 | `Load` and `Write` indices have exactly one expression (1-D tensors) | `emit_load`, `emit_write` | `assert len(load.index) == 1` in `emit_load` (`emit_write` likewise) |
 | 11 | A `Load` defines exactly one value (no vector loads) | `emit_load` | `assert len(load.names) == 1` |
 | 12 | A `Write` stores 2 or 4 values (vector store, no scalar store) | `emit_write` | `assert len(write.values) in (2, 4)` |

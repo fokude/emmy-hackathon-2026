@@ -2,6 +2,7 @@
 
 from emmy.compiler.graph import Graph
 from emmy.compiler.ir.expr import BinaryExpr, Literal, Var
+from emmy.compiler.ir.kernel.ir import Tile
 from emmy.compiler.ir.stmt.leaves import Assign, Load, Write
 from ptxgen.consts import (
     VISIBLE,
@@ -42,6 +43,7 @@ def emit_kernel(graph: Graph, kernel: dict) -> list[str]:
     The body is built before the .reg lines, because the register counts are
     only known once every instruction has been emitted.
     """
+    assert kernel["grid"][1:] == [1, 1] and kernel["block"][1:] == [1, 1], "ASSUMPTIONS 7: 1-D launch only"
     reg_alloc = RegisterAllocator()
     # run emit_kernel body instead of inline with returns so register allocator can be populated before emiting register declarations
     body = emit_kernel_body(graph, kernel, reg_alloc)
@@ -67,7 +69,9 @@ def emit_kernel_signature(kernel: dict) -> list[str]:
 
 def emit_kernel_body(graph: Graph, kernel: dict, reg_alloc: RegisterAllocator) -> list[str]:
     """Return the kernel instructions, ending with the DONE label and ret."""
-    tile = graph.nodes[kernel["node"]].op.body[0]
+    body = graph.nodes[kernel["node"]].op.body
+    assert len(body) == 1 and isinstance(body[0], Tile), "ASSUMPTIONS 4: kernel body must be a single Tile"
+    tile = body[0]
     return [
         *emit_prologue(tile, reg_alloc),
         *emit_param_loads(kernel, reg_alloc),
@@ -89,6 +93,7 @@ def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
     arg_dict = {}
     for arg in kernel["args"]:
         arg_dict[arg["name"]] = arg
+    assert set(arg_dict) == set(arg_names), "ASSUMPTIONS 2: args and arg_order must list the same names"
 
     param_lines = []
     for idx, arg_name in enumerate(arg_names):
@@ -200,7 +205,8 @@ def emit_prologue(tile, reg_alloc):
 
     Threads whose id is at or past the tile extent branch to DONE.
     """
-    assert(len(tile.axes) == 1)
+    assert len(tile.axes) == 1, "ASSUMPTIONS 5: a Tile has exactly one axis"
+    assert tile.block_threads is None, "ASSUMPTIONS 9: cooperative tiles are not supported"
 
     block_id_reg = reg_alloc.new_reg('r')
     num_threads_reg = reg_alloc.new_reg('r')

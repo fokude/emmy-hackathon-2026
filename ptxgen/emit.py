@@ -1,6 +1,7 @@
 """Walk the Kernel IR and emit PTX as lists of lines."""
 
 from emmy.compiler.graph import Graph
+from emmy.compiler.ir.expr import BinaryExpr, Literal, Var
 from ptxgen.consts import (
     VISIBLE,
     ENTRY,
@@ -15,6 +16,7 @@ from ptxgen.consts import (
     LOAD,
     CONVERT_ADDRESS,
     INDENT,
+    BINARY_OPS,
     DONE_LABEL,
     SET_PREDICATE,
     GREATER_EQUALS,
@@ -102,6 +104,25 @@ def emit_param_loads(kernel: dict, reg_alloc: RegisterAllocator) -> list[str]:
         lines.append(f"{INDENT}{CONVERT_ADDRESS}.to.global{U64_TYPE} {global_reg}, {param_reg};")
         reg_alloc.bind_tensor(arg_name, global_reg)
     return lines
+
+
+def emit_expr(expr, reg_alloc: RegisterAllocator) -> tuple[str, list[str]]:
+    """Return (operand, lines) that evaluate an IR index expression."""
+    match expr:
+        case Var(name=name):
+            return reg_alloc.lookup(name), []
+        case Literal(value=value):
+            return str(value), []
+        case BinaryExpr(op=op, left=left, right=right):
+            left_operand, left_lines = emit_expr(left, reg_alloc)
+            right_operand, right_lines = emit_expr(right, reg_alloc)
+            result_reg = reg_alloc.new_reg('r')
+            instruction = BINARY_OPS[op]
+            line = f"{INDENT}{instruction}{U32_TYPE} {result_reg}, {left_operand}, {right_operand};"
+            # Post-order: the operands' lines come before the instruction that reads them.
+            return result_reg, [*left_lines, *right_lines, line]
+        case _:
+            raise NotImplementedError(f"expression {type(expr).__name__}")
 
 
 def emit_prologue(tile, reg_alloc):

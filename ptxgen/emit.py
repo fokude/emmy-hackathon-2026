@@ -8,28 +8,28 @@ from ptxgen.consts import (
     SPACE_CHAR,
 )
 
-def parse_graph(graph, metadata):
+def emit_graph(graph, metadata):
     for kernel in metadata["kernels"]:
-        parse_kernel_signature(kernel)
-        parse_kernel_body(graph)
+        emit_kernel_signature(kernel)
+        emit_kernel_body(graph)
 
-def parse_kernel_signature(kernel):
+def emit_kernel_signature(kernel):
     entry_name = kernel["entry"]
     arg_names = kernel["arg_order"]
 
     print(f"""
 {VISIBLE} {ENTRY} {entry_name}(
-{parse_params(arg_names, kernel)}
+{format_params(arg_names, kernel)}
 )
     """)
 
-def parse_kernel_body(graph):
+def emit_kernel_body(graph):
     print(f"""
 {{
 }}
     """)
 
-def parse_params(arg_names, kernel):
+def format_params(arg_names, kernel):
     # ask if metadata is guaranteed to always have same num args as arg order, and if args in args will be in same order as arg order..
     arg_dict = {}
     for arg in kernel["args"]:

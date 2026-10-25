@@ -17,6 +17,8 @@ from ptxgen.consts import (
     CONVERT_ADDRESS,
     INDENT,
     BINARY_OPS,
+    MULTIPLY_WIDE,
+    ADD,
     DONE_LABEL,
     SET_PREDICATE,
     GREATER_EQUALS,
@@ -123,6 +125,19 @@ def emit_expr(expr, reg_alloc: RegisterAllocator) -> tuple[str, list[str]]:
             return result_reg, [*left_lines, *right_lines, line]
         case _:
             raise NotImplementedError(f"expression {type(expr).__name__}")
+
+
+def emit_address(tensor_name, index_expr, bytes_per_element, reg_alloc):
+    """Return (address_reg, lines) for element index_expr of a tensor."""
+    index_operand, lines = emit_expr(index_expr, reg_alloc)
+    offset_reg = reg_alloc.new_reg('rd')
+    address_reg = reg_alloc.new_reg('rd')
+    base_reg = reg_alloc.lookup_tensor(tensor_name)
+    lines += [
+        f"{INDENT}{MULTIPLY_WIDE}{U32_TYPE} {offset_reg}, {index_operand}, {bytes_per_element};",
+        f"{INDENT}{ADD}{U64_TYPE} {address_reg}, {base_reg}, {offset_reg};",
+    ]
+    return address_reg, lines
 
 
 def emit_prologue(tile, reg_alloc):

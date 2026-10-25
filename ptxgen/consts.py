@@ -24,6 +24,8 @@ CONVERT_ADDRESS = "cvta"
 
 # IR index operator -> PTX instruction
 BINARY_OPS = {"+": "add", "*": "mul.lo"}
+MULTIPLY_WIDE = "mul.wide"
+ADD = "add"
 MULTIPLY_ADD = "mad"
 SET_PREDICATE = "setp"
 BRANCH = "bra"

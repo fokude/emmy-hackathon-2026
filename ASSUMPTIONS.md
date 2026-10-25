@@ -14,3 +14,4 @@ where the code relies on it, so a violation fails loudly instead of producing wr
 | 7 | The launch is one-dimensional (`ctaid.x`, `ntid.x`, `tid.x`) | `emit_prologue` | not yet asserted |
 | 8 | Every dtype is `f32` | statement emitters (not written yet) | to be asserted |
 | 9 | The tile is the scalar tier (`block_threads` is `None`), so the axis variable equals the global thread id | `emit_prologue` | not yet asserted |
+| 10 | `Load` and `Write` indices have exactly one expression (1-D tensors) | `emit_address` (not written yet) | to be asserted |

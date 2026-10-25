@@ -1,3 +1,5 @@
+"""PTX keywords and formatting constants, grouped by category."""
+
 # --- directives ---
 VISIBLE = ".visible"
 ENTRY = ".entry"

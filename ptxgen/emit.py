@@ -1,3 +1,5 @@
+"""Walk the Kernel IR and emit PTX as lists of lines."""
+
 from emmy.compiler.graph import Graph
 from ptxgen.consts import (
     VISIBLE,
@@ -20,12 +22,18 @@ from ptxgen.consts import (
 from ptxgen.regs import RegisterAllocator
 
 def emit_graph(graph: Graph, metadata: dict) -> list[str]:
+    """Return the PTX lines for every kernel listed in the metadata."""
     lines = []
     for kernel in metadata["kernels"]:
         lines += emit_kernel(graph, kernel)
     return lines
 
 def emit_kernel(graph: Graph, kernel: dict) -> list[str]:
+    """Return the PTX lines for one kernel.
+
+    The body is built before the .reg lines, because the register counts are
+    only known once every instruction has been emitted.
+    """
     reg_alloc = RegisterAllocator()
     # run emit_kernel body instead of inline with returns so register allocator can be populated before emiting register declarations
     body = emit_kernel_body(graph, kernel, reg_alloc)
@@ -38,6 +46,7 @@ def emit_kernel(graph: Graph, kernel: dict) -> list[str]:
     ]
 
 def emit_kernel_signature(kernel: dict) -> list[str]:
+    """Return the .visible .entry line and the parameter list."""
     entry_name = kernel["entry"]
     arg_names = kernel["arg_order"]
 
@@ -49,6 +58,7 @@ def emit_kernel_signature(kernel: dict) -> list[str]:
     ]
 
 def emit_kernel_body(graph: Graph, kernel: dict, reg_alloc: RegisterAllocator) -> list[str]:
+    """Return the kernel instructions, ending with the DONE label and ret."""
     tile = graph.nodes[kernel["node"]].op.body[0]
     return [
         *emit_prologue(tile, reg_alloc),
@@ -57,11 +67,13 @@ def emit_kernel_body(graph: Graph, kernel: dict, reg_alloc: RegisterAllocator) -
     ]
 
 def emit_reg_decls(reg_alloc: RegisterAllocator) -> list[str]:
+    """Return one .reg line per register kind the allocator handed out."""
     return [
         f"{SPACE_CHAR * TAB_SPACE}.reg {REG_DECL_TYPES[kind]} %{kind}<{count}>;" for kind, count in reg_alloc.counts().items()
     ]
 
 def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
+    """Return one .param line per kernel argument, in arg_order."""
     # ask if metadata is guaranteed to always have same num args as arg order, and if args in args will be in same order as arg order..
     arg_dict = {}
     for arg in kernel["args"]:
@@ -77,6 +89,10 @@ def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
 
 
 def emit_prologue(tile, reg_alloc):
+    """Return the lines that compute the global thread id and guard the tile.
+
+    Threads whose id is at or past the tile extent branch to DONE.
+    """
     assert(len(tile.axes) == 1)
 
     indent = SPACE_CHAR * TAB_SPACE

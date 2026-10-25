@@ -1,3 +1,5 @@
+"""Command-line entry point: compile a Kernel IR json file to PTX on stdout."""
+
 import sys
 import json
 from pathlib import Path
@@ -5,12 +7,17 @@ from emmy.compiler.graph import Graph
 from ptxgen.emit import emit_graph
 
 def main():
+    """Print the PTX header, then the PTX for every kernel in the problem."""
     ir_data, metadata = parse_args()
     print_header()
     problem_graph = Graph.from_dict(ir_data)
     print("\n".join(emit_graph(problem_graph, metadata)))
 
 def parse_args():
+    """Read the IR path from argv and return the parsed (ir_data, metadata).
+
+    Exits with a message on a missing, unreadable or malformed file.
+    """
     if len(sys.argv) < 2:
         print("usage: ./venv/bin/python compile.py ./problems/<problem>/<problem>.ir.json")
         sys.exit(0)
@@ -38,6 +45,7 @@ def parse_args():
     return (ir_data, metadata)
 
 def print_header():
+    """Print the PTX version, target and address size lines."""
     print(".version 8.0")
     print(".target sm_89")
     print(".address_size 64")

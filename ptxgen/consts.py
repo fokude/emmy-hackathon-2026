@@ -1,4 +1,5 @@
 """PTX keywords and formatting constants, grouped by category."""
+from ptxgen.types import PtxType
 
 # --- directives ---
 VISIBLE = ".visible"
@@ -6,15 +7,13 @@ ENTRY = ".entry"
 PARAM = ".param"
 
 # --- types ---
-U64_TYPE = ".u64"
-U32_TYPE = ".u32"
 
 # register kind (see regs.RegType) -> type used in the .reg declaration
 REG_DECL_TYPES = {
-    "f": ".f32",
-    "p": ".pred",
-    "r": ".b32",
-    "rd": ".b64",
+    "f": PtxType.F32,
+    "p": PtxType.PRED,
+    "r": PtxType.B32,
+    "rd": PtxType.B64,
 }
 
 # --- operations ---

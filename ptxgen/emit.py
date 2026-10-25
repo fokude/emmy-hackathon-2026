@@ -7,11 +7,9 @@ from ptxgen.consts import (
     ENTRY,
     PARAM,
     PARAM_PREFIX,
-    U64_TYPE,
     TAB_SPACE,
     SPACE_CHAR,
     REG_DECL_TYPES,
-    U32_TYPE,
     MOVE,
     LOAD,
     CONVERT_ADDRESS,
@@ -27,6 +25,7 @@ from ptxgen.consts import (
     LOWER_BITS,
 )
 from ptxgen.regs import RegisterAllocator
+from ptxgen.types import PtxType
 
 def emit_graph(graph: Graph, metadata: dict) -> list[str]:
     """Return the PTX lines for every kernel listed in the metadata."""
@@ -91,7 +90,7 @@ def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
     for idx, arg_name in enumerate(arg_names):
         arg = arg_dict[arg_name]
         comma = "," if idx < len(arg_names) - 1 else ""
-        param_line = f"{SPACE_CHAR * TAB_SPACE} {PARAM} {U64_TYPE} {PARAM_PREFIX + arg["name"]}{comma}"
+        param_line = f"{SPACE_CHAR * TAB_SPACE} {PARAM} {PtxType.U64} {PARAM_PREFIX + arg["name"]}{comma}"
         param_lines.append(param_line)
     return param_lines
 
@@ -102,8 +101,8 @@ def emit_param_loads(kernel: dict, reg_alloc: RegisterAllocator) -> list[str]:
     for arg_name in kernel["arg_order"]:
         param_reg = reg_alloc.new_reg('rd')
         global_reg = reg_alloc.new_reg('rd')
-        lines.append(f"{INDENT}{LOAD}{PARAM}{U64_TYPE} {param_reg}, [{PARAM_PREFIX}{arg_name}];")
-        lines.append(f"{INDENT}{CONVERT_ADDRESS}.to.global{U64_TYPE} {global_reg}, {param_reg};")
+        lines.append(f"{INDENT}{LOAD}{PARAM}{PtxType.U64} {param_reg}, [{PARAM_PREFIX}{arg_name}];")
+        lines.append(f"{INDENT}{CONVERT_ADDRESS}.to.global{PtxType.U64} {global_reg}, {param_reg};")
         reg_alloc.bind_tensor(arg_name, global_reg)
     return lines
 
@@ -120,7 +119,7 @@ def emit_expr(expr, reg_alloc: RegisterAllocator) -> tuple[str, list[str]]:
             right_operand, right_lines = emit_expr(right, reg_alloc)
             result_reg = reg_alloc.new_reg('r')
             instruction = BINARY_OPS[op]
-            line = f"{INDENT}{instruction}{U32_TYPE} {result_reg}, {left_operand}, {right_operand};"
+            line = f"{INDENT}{instruction}{PtxType.U32} {result_reg}, {left_operand}, {right_operand};"
             # Post-order: the operands' lines come before the instruction that reads them.
             return result_reg, [*left_lines, *right_lines, line]
         case _:
@@ -134,8 +133,8 @@ def emit_address(tensor_name, index_expr, bytes_per_element, reg_alloc):
     address_reg = reg_alloc.new_reg('rd')
     base_reg = reg_alloc.lookup_tensor(tensor_name)
     lines += [
-        f"{INDENT}{MULTIPLY_WIDE}{U32_TYPE} {offset_reg}, {index_operand}, {bytes_per_element};",
-        f"{INDENT}{ADD}{U64_TYPE} {address_reg}, {base_reg}, {offset_reg};",
+        f"{INDENT}{MULTIPLY_WIDE}{PtxType.U32} {offset_reg}, {index_operand}, {bytes_per_element};",
+        f"{INDENT}{ADD}{PtxType.U64} {address_reg}, {base_reg}, {offset_reg};",
     ]
     return address_reg, lines
 
@@ -160,10 +159,10 @@ def emit_prologue(tile, reg_alloc):
     reg_alloc.bind(axis.name, gid_reg)
 
     return [
-        f"{indent}{MOVE}{U32_TYPE} {block_id_reg}, %ctaid.x;",
-        f"{indent}{MOVE}{U32_TYPE} {num_threads_reg}, %ntid.x;",
-        f"{indent}{MOVE}{U32_TYPE} {thread_id_reg}, %tid.x;",
-        f"{indent}{MULTIPLY_ADD}.{LOWER_BITS}{U32_TYPE} {gid_reg}, {block_id_reg}, {num_threads_reg}, {thread_id_reg};",
-        f"{indent}{SET_PREDICATE}.{GREATER_EQUALS}{U32_TYPE} {thread_boundary_reg}, {gid_reg}, {tile.axes[0].extent.as_static()};",
+        f"{indent}{MOVE}{PtxType.U32} {block_id_reg}, %ctaid.x;",
+        f"{indent}{MOVE}{PtxType.U32} {num_threads_reg}, %ntid.x;",
+        f"{indent}{MOVE}{PtxType.U32} {thread_id_reg}, %tid.x;",
+        f"{indent}{MULTIPLY_ADD}.{LOWER_BITS}{PtxType.U32} {gid_reg}, {block_id_reg}, {num_threads_reg}, {thread_id_reg};",
+        f"{indent}{SET_PREDICATE}.{GREATER_EQUALS}{PtxType.U32} {thread_boundary_reg}, {gid_reg}, {tile.axes[0].extent.as_static()};",
         f"{indent}@{thread_boundary_reg} {BRANCH} {DONE_LABEL};",
     ]

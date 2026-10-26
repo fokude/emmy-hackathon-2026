@@ -1,13 +1,16 @@
 """Translate each IR statement of a tile body into PTX lines."""
 
-from emmy.compiler.ir.kernel.ir import WarpShuffle
+from emmy.compiler.ir.kernel.ir import Smem, Sync, WarpShuffle
 from emmy.compiler.ir.stmt import StridedLoop
 from emmy.compiler.ir.stmt.leaves import Accum, Assign, Load, Write
 from ptxgen.address import emit_element_address, emit_expr
 from ptxgen.consts import (
     ADD,
+    ALIGN,
+    BARRIER_SYNC,
     BRANCH,
     ELEMENTWISE_OPS,
+    F32_BYTES,
     FULL_WARP_MASK,
     GLOBAL,
     GREATER_EQUALS,
@@ -17,6 +20,7 @@ from ptxgen.consts import (
     LOOP_LABEL,
     MOVE,
     SET_PREDICATE,
+    SHARED,
     SHUFFLE_BUTTERFLY,
     SHUFFLE_MAX_LANE,
     STORE,
@@ -111,6 +115,18 @@ def emit_warp_shuffle(shuffle, reg_alloc: RegisterAllocator) -> list[str]:
     return lines
 
 
+def emit_smem(smem) -> list[str]:
+    """Return the .shared declaration for a block-wide array of floats, sized in bytes."""
+    assert smem.dtype == "float" and len(smem.extents) == 1, "ASSUMPTIONS 18: an Smem is a 1-D float array"
+    return [f"{INDENT}{SHARED} {ALIGN} {F32_BYTES} {PtxType.B8} {smem.name}[{smem.extents[0] * F32_BYTES}];"]
+
+
+def emit_sync(sync) -> list[str]:
+    """Return the block-wide barrier: no thread continues until all threads of the block have arrived."""
+    assert sync.count is None and not sync.warp, "ASSUMPTIONS 19: a Sync is a block-wide barrier (no count, not warp-only)"
+    return [f"{INDENT}{BARRIER_SYNC} {sync.barrier_id};"]
+
+
 def emit_strided_loop(loop, reg_alloc: RegisterAllocator, labels: LabelAllocator) -> list[str]:
     """Return the lines for a loop whose variable starts at loop.start and grows by loop.step."""
     assert loop.end is None, "ASSUMPTIONS 15: a StridedLoop stops at its axis extent (end is None)"
@@ -154,6 +170,10 @@ def emit_statements(body, reg_alloc: RegisterAllocator, labels: LabelAllocator) 
                 lines += emit_strided_loop(stmt, reg_alloc, labels)
             case WarpShuffle():
                 lines += emit_warp_shuffle(stmt, reg_alloc)
+            case Smem():
+                lines += emit_smem(stmt)
+            case Sync():
+                lines += emit_sync(stmt)
             case _:
                 raise NotImplementedError(f"statement {type(stmt).__name__}")
     return lines

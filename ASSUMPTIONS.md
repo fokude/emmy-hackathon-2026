@@ -22,3 +22,5 @@ where the code relies on it, so a violation fails loudly instead of producing wr
 | 15 | A `StridedLoop` stops at its axis extent (`end` is `None`) | `emit_strided_loop` | `assert loop.end is None` |
 | 16 | A `StridedLoop` has `seed` True | `emit_accum_seeds` | `assert loop.seed` |
 | 17 | A `WarpShuffle` spans one full warp (`length` 32) and combines one state value | `emit_warp_shuffle` | `assert` on `length`, `state` and `combine_states` |
+| 18 | An `Smem` is a 1-D float array | `emit_smem` | `assert` on `dtype` and `extents` |
+| 19 | A `Sync` is a block-wide barrier (no `count`, not warp-only) | `emit_sync` | `assert` on `count` and `warp` |

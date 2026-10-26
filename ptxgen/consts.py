@@ -6,6 +6,8 @@ VISIBLE = ".visible"
 ENTRY = ".entry"
 PARAM = ".param"
 GLOBAL = ".global"
+SHARED = ".shared"
+ALIGN = ".align"
 
 # --- types ---
 
@@ -37,6 +39,9 @@ ELEMENTWISE_OPS = {
 MULTIPLY_ADD = "mad"
 SET_PREDICATE = "setp"
 BRANCH = "bra"
+AND = "and"
+SHIFT_RIGHT = "shr"
+BARRIER_SYNC = "bar.sync"
 
 # shfl.sync.bfly: lane i reads the register of lane (i XOR lane_mask), within the same warp
 SHUFFLE_BUTTERFLY = "shfl.sync.bfly"
@@ -47,6 +52,8 @@ SHUFFLE_MAX_LANE = "0x1f"
 FULL_WARP_MASK = "0xffffffff"
 # lanes (threads) per warp
 WARP_SIZE = 32
+# bytes per float
+F32_BYTES = 4
 
 # --- operation modifiers ---
 LOWER_BITS = "lo"
@@ -57,6 +64,10 @@ PARAM_PREFIX = PARAM[1:] + "_"
 DONE_LABEL = "DONE"
 LOOP_LABEL = "LOOP"
 LOOP_END_LABEL = "LOOP_END"
+
+# --- IR variable names ---
+LANE_VAR = "lane"
+WARP_VAR = "warp"
 
 # --- formatting ---
 TAB_SPACE = 2

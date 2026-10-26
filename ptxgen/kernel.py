@@ -19,6 +19,11 @@ from ptxgen.consts import (
     BRANCH,
     MULTIPLY_ADD,
     LOWER_BITS,
+    AND,
+    SHIFT_RIGHT,
+    LANE_VAR,
+    WARP_VAR,
+    WARP_SIZE,
 )
 from ptxgen.labels import LabelAllocator
 from ptxgen.regs import RegisterAllocator
@@ -152,6 +157,15 @@ def emit_cooperative_prologue(tile, kernel, reg_alloc):
     assert kernel["block"][0] == axis.extent.as_static(), "ASSUMPTIONS 14: block size equals the cooperative axis extent"
 
     thread_id_reg = reg_alloc.new_reg('r')
+    lane_reg = reg_alloc.new_reg('r')
+    warp_reg = reg_alloc.new_reg('r')
     reg_alloc.bind(axis.name, thread_id_reg)
+    reg_alloc.bind(LANE_VAR, lane_reg)
+    reg_alloc.bind(WARP_VAR, warp_reg)
 
-    return [f"{INDENT}{MOVE}{PtxType.U32} {thread_id_reg}, %tid.x;"]
+    return [
+        f"{INDENT}{MOVE}{PtxType.U32} {thread_id_reg}, %tid.x;",
+        # keeps the low 5 bits, which is the position within the warp (0 to 31)
+        f"{INDENT}{AND}{PtxType.B32} {lane_reg}, {thread_id_reg}, {WARP_SIZE - 1};",
+        f"{INDENT}{SHIFT_RIGHT}{PtxType.U32} {warp_reg}, {thread_id_reg}, {WARP_SIZE.bit_length() - 1};",
+    ]

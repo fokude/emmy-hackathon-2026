@@ -10,6 +10,7 @@ class PtxType(StrEnum):
     F32 = ".f32"
     B32 = ".b32"
     B64 = ".b64"
+    B8 = ".b8"
     PRED = ".pred"
 
 

@@ -1,4 +1,5 @@
 """PTX data types and the mapping from IR dtype names."""
+import struct
 from enum import StrEnum
 
 
@@ -16,3 +17,8 @@ class PtxType(StrEnum):
 DTYPE_INFO = {
     "f32": (PtxType.F32, "f"),
 }
+
+
+def f32_literal(value: float) -> str:
+    """Return value as a PTX f32 literal: 0f followed by the 8 hex digits of its IEEE-754 bits."""
+    return "0f" + struct.pack(">f", value).hex().upper()

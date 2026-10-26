@@ -1,7 +1,7 @@
 """Translate each IR statement of a tile body into PTX lines."""
 
 from emmy.compiler.ir.stmt import StridedLoop
-from emmy.compiler.ir.stmt.leaves import Assign, Load, Write
+from emmy.compiler.ir.stmt.leaves import Accum, Assign, Load, Write
 from ptxgen.address import emit_element_address, emit_expr
 from ptxgen.consts import (
     ADD,
@@ -19,7 +19,7 @@ from ptxgen.consts import (
 )
 from ptxgen.labels import LabelAllocator
 from ptxgen.regs import RegisterAllocator
-from ptxgen.types import DTYPE_INFO, PtxType
+from ptxgen.types import DTYPE_INFO, PtxType, f32_literal
 
 
 def emit_load(load, reg_alloc: RegisterAllocator) -> list[str]:
@@ -58,6 +58,28 @@ def emit_write(write, reg_alloc: RegisterAllocator) -> list[str]:
     return lines
 
 
+def emit_accum_seeds(loop, reg_alloc: RegisterAllocator) -> list[str]:
+    """Return one line per Accum in the loop body that sets its register to the op's identity."""
+    assert loop.seed, "ASSUMPTIONS 16: a StridedLoop seeds its accumulators (seed is True)"
+    lines = []
+    for stmt in loop.body:
+        if isinstance(stmt, Accum):
+            ptx_type, reg_kind = DTYPE_INFO[stmt.dtype.name]
+            acc_reg = reg_alloc.new_reg(reg_kind)
+            lines.append(f"{INDENT}{MOVE}{ptx_type} {acc_reg}, {f32_literal(stmt.op.identity)};")
+            reg_alloc.bind(stmt.name, acc_reg)
+    return lines
+
+
+def emit_accum(accum, reg_alloc: RegisterAllocator) -> list[str]:
+    """Return the instruction for acc = op(acc, value), storing the result back in the accumulator's own register."""
+    ptx_type, _ = DTYPE_INFO[accum.dtype.name]
+    acc_reg = reg_alloc.lookup(accum.name)
+    value_reg = reg_alloc.lookup(accum.value)
+    instruction, _ = ELEMENTWISE_OPS[accum.op.name]
+    return [f"{INDENT}{instruction}{ptx_type} {acc_reg}, {acc_reg}, {value_reg};"]
+
+
 def emit_strided_loop(loop, reg_alloc: RegisterAllocator, labels: LabelAllocator) -> list[str]:
     """Return the lines for a loop whose variable starts at loop.start and grows by loop.step."""
     assert loop.end is None, "ASSUMPTIONS 15: a StridedLoop stops at its axis extent (end is None)"
@@ -73,6 +95,7 @@ def emit_strided_loop(loop, reg_alloc: RegisterAllocator, labels: LabelAllocator
         *start_lines,
         *step_lines,
         f"{INDENT}{MOVE}{PtxType.U32} {counter_reg}, {start_operand};",
+        *emit_accum_seeds(loop, reg_alloc),
         f"{loop_label}:",
         f"{INDENT}{SET_PREDICATE}.{GREATER_EQUALS}{PtxType.U32} {exit_predicate_reg}, {counter_reg}, {extent};",
         f"{INDENT}@{exit_predicate_reg} {BRANCH} {end_label};",
@@ -94,6 +117,8 @@ def emit_statements(body, reg_alloc: RegisterAllocator, labels: LabelAllocator) 
                 lines += emit_assign(stmt, reg_alloc)
             case Write():
                 lines += emit_write(stmt, reg_alloc)
+            case Accum():
+                lines += emit_accum(stmt, reg_alloc)
             case StridedLoop():
                 lines += emit_strided_loop(stmt, reg_alloc, labels)
             case _:

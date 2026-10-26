@@ -20,3 +20,4 @@ where the code relies on it, so a violation fails loudly instead of producing wr
 | 13 | Inputs contain no NaN, because `max.f32` returns the non-NaN operand so `relu(NaN)` becomes 0 where PyTorch keeps NaN | `ELEMENTWISE_OPS` (`relu`) | not checkable at compile time |
 | 14 | Cooperative tiles are supported only in the r01 to r03 shape: one axis, one block, block size equals the axis extent (r04 adds a `ctaid.x` row axis later) | `emit_cooperative_prologue` | `assert` on `grid` and `block` |
 | 15 | A `StridedLoop` stops at its axis extent (`end` is `None`) | `emit_strided_loop` | `assert loop.end is None` |
+| 16 | A `StridedLoop` has `seed` True | `emit_accum_seeds` | `assert loop.seed` |

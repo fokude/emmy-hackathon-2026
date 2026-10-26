@@ -146,16 +146,31 @@ def emit_prologue(tile, reg_alloc):
 
 
 def emit_cooperative_prologue(tile, kernel, reg_alloc):
-    """Return the line that reads the thread id for a cooperative tile.
+    """Return the lines that define the axes, lane and warp of a cooperative tile.
 
-    The launch is one block whose size equals the axis extent, so the axis
-    variable (a0_co) is tid.x and no bounds guard is needed.
+    The last axis is the thread id (tid.x). An axis before it is the row, one block per row
+    (ctaid.x). Every thread is in range, so no bounds guard is needed.
     """
-    assert len(tile.axes) == 1, "ASSUMPTIONS 5: a Tile has exactly one axis"
-    axis = tile.axes[0]
-    assert kernel["grid"] == [1, 1, 1], "ASSUMPTIONS 14: a cooperative tile launches exactly one block"
+    assert len(tile.axes) in (1, 2), "ASSUMPTIONS 5: a cooperative Tile has the cooperative axis, optionally after a row axis"
+    # the last axis is the thread number in the block (tid.x); an axis before it is the block number (ctaid.x)
+    *row_axes, axis = tile.axes
+    block_count = row_axes[0].extent.as_static() if row_axes else 1
+    assert kernel["grid"] == [block_count, 1, 1], "ASSUMPTIONS 14: a cooperative tile launches one block per row"
     assert kernel["block"][0] == axis.extent.as_static(), "ASSUMPTIONS 14: block size equals the cooperative axis extent"
 
+    lines = []
+    if row_axes:
+        row_reg = reg_alloc.new_reg('r')
+        reg_alloc.bind(row_axes[0].name, row_reg)
+        lines.append(f"{INDENT}{MOVE}{PtxType.U32} {row_reg}, %ctaid.x;")
+    return [*lines, *emit_cooperative_thread_position(axis, reg_alloc)]
+
+
+def emit_cooperative_thread_position(axis, reg_alloc):
+    """Return the lines that read the thread id and derive the lane and warp from it.
+
+    Binds the cooperative axis name to the thread id, and LANE_VAR and WARP_VAR to the lane and warp.
+    """
     thread_id_reg = reg_alloc.new_reg('r')
     lane_reg = reg_alloc.new_reg('r')
     warp_reg = reg_alloc.new_reg('r')

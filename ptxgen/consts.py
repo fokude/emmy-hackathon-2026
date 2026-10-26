@@ -34,6 +34,7 @@ ADD = "add"
 ELEMENTWISE_OPS = {
     "add": ("add", []),
     "multiply": ("mul", []),
+    "divide": ("div.rn", []),
     "relu": ("max", ["0f00000000"]),
 }
 MULTIPLY_ADD = "mad"

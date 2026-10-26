@@ -71,10 +71,13 @@ def emit_write(write, reg_alloc: RegisterAllocator) -> list[str]:
 
 def emit_global_write(write, reg_alloc: RegisterAllocator) -> list[str]:
     """Return the lines that store 1, 2 or 4 values to an output tensor in global memory."""
-    assert len(write.index) == 1, "ASSUMPTIONS 10: a Write index has exactly one expression"
+    assert len(write.index) in (0, 1), "ASSUMPTIONS 10: a Write index has zero (single-element tensor) or one expression"
     assert len(write.values) in (1, 2, 4), "ASSUMPTIONS 12: a global Write stores 1, 2 or 4 values"
     ptx_type, _ = DTYPE_INFO[write.value_dtype.name]
-    address_reg, lines = emit_element_address(write.output, write.index[0], write.value_dtype.nbytes, reg_alloc)
+    if write.index:
+        address_reg, lines = emit_element_address(write.output, write.index[0], write.value_dtype.nbytes, reg_alloc)
+    else:
+        address_reg, lines = reg_alloc.lookup_tensor(write.output), []
     value_regs = [reg_alloc.lookup(name) for name in write.values]
     if len(value_regs) == 1:
         vector_suffix, store_operand = "", value_regs[0]

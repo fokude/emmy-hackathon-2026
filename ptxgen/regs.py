@@ -22,6 +22,7 @@ class RegisterAllocator:
         self.counter = defaultdict(int)
         self.value_name_to_reg: dict[str, str] = {}  # value name (Load/Assign result) -> register name
         self.tensor_to_reg: dict[str, str] = {}  # tensor name (kernel argument) -> base address register
+        self.shared_arrays: set[str] = set()  # names of Smem arrays declared so far
 
     def new_reg(self, kind: str) -> str:
         """Return a fresh register name of the given kind, such as %f0 then %f1."""
@@ -54,6 +55,14 @@ class RegisterAllocator:
         if tensor_name not in self.tensor_to_reg:
             raise KeyError(f"tensor '{tensor_name}' has no base address loaded")
         return self.tensor_to_reg[tensor_name]
+
+    def bind_shared(self, array_name: str) -> None:
+        """Record that array_name is a shared memory array."""
+        self.shared_arrays.add(array_name)
+
+    def is_shared(self, array_name: str) -> bool:
+        """Return True if array_name was declared as a shared memory array."""
+        return array_name in self.shared_arrays
 
     def counts(self) -> dict[str, int]:
         """Return how many registers of each kind were handed out."""

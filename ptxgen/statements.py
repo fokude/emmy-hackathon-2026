@@ -1,14 +1,16 @@
 """Translate each IR statement of a tile body into PTX lines."""
 
 from emmy.compiler.ir.kernel.ir import Smem, Sync, WarpShuffle
-from emmy.compiler.ir.stmt import StridedLoop
+from emmy.compiler.ir.expr import BinaryExpr
+from emmy.compiler.ir.stmt import Cond, StridedLoop
 from emmy.compiler.ir.stmt.leaves import Accum, Assign, Load, Write
-from ptxgen.address import emit_element_address, emit_expr
+from ptxgen.address import emit_element_address, emit_expr, emit_shared_address
 from ptxgen.consts import (
     ADD,
     ALIGN,
     BARRIER_SYNC,
     BRANCH,
+    COND_END_LABEL,
     ELEMENTWISE_OPS,
     F32_BYTES,
     FULL_WARP_MASK,
@@ -19,6 +21,7 @@ from ptxgen.consts import (
     LOOP_END_LABEL,
     LOOP_LABEL,
     MOVE,
+    NOT_EQUALS,
     SET_PREDICATE,
     SHARED,
     SHUFFLE_BUTTERFLY,
@@ -59,15 +62,34 @@ def emit_assign(assign, reg_alloc: RegisterAllocator) -> list[str]:
 
 
 def emit_write(write, reg_alloc: RegisterAllocator) -> list[str]:
-    """Return the lines that store the computed values to the output tensor."""
+    """Return the lines that store computed values to a shared array or an output tensor."""
+    if reg_alloc.is_shared(write.output):
+        return emit_shared_write(write, reg_alloc)
+    return emit_global_write(write, reg_alloc)
+
+
+def emit_global_write(write, reg_alloc: RegisterAllocator) -> list[str]:
+    """Return the lines that store 1, 2 or 4 values to an output tensor in global memory."""
     assert len(write.index) == 1, "ASSUMPTIONS 10: a Write index has exactly one expression"
-    assert len(write.values) in (2, 4), "ASSUMPTIONS 12: a Write stores 2 or 4 values (vector store)"
+    assert len(write.values) in (1, 2, 4), "ASSUMPTIONS 12: a global Write stores 1, 2 or 4 values"
     ptx_type, _ = DTYPE_INFO[write.value_dtype.name]
     address_reg, lines = emit_element_address(write.output, write.index[0], write.value_dtype.nbytes, reg_alloc)
     value_regs = [reg_alloc.lookup(name) for name in write.values]
-    lines.append(
-        f"{INDENT}{STORE}{GLOBAL}.v{len(value_regs)}{ptx_type} [{address_reg}], {{{', '.join(value_regs)}}};"
-    )
+    if len(value_regs) == 1:
+        vector_suffix, store_operand = "", value_regs[0]
+    else:
+        vector_suffix, store_operand = f".v{len(value_regs)}", f"{{{', '.join(value_regs)}}}"
+    lines.append(f"{INDENT}{STORE}{GLOBAL}{vector_suffix}{ptx_type} [{address_reg}], {store_operand};")
+    return lines
+
+
+def emit_shared_write(write, reg_alloc: RegisterAllocator) -> list[str]:
+    """Return the lines that store one value into a slot of a shared array."""
+    assert len(write.index) == 1, "ASSUMPTIONS 10: a Write index has exactly one expression"
+    assert len(write.values) == 1, "ASSUMPTIONS 20: a shared Write stores one value"
+    ptx_type, _ = DTYPE_INFO[write.value_dtype.name]
+    address_reg, lines = emit_shared_address(write.output, write.index[0], write.value_dtype.nbytes, reg_alloc)
+    lines.append(f"{INDENT}{STORE}{SHARED}{ptx_type} [{address_reg}], {reg_alloc.lookup(write.values[0])};")
     return lines
 
 
@@ -115,9 +137,10 @@ def emit_warp_shuffle(shuffle, reg_alloc: RegisterAllocator) -> list[str]:
     return lines
 
 
-def emit_smem(smem) -> list[str]:
+def emit_smem(smem, reg_alloc: RegisterAllocator) -> list[str]:
     """Return the .shared declaration for a block-wide array of floats, sized in bytes."""
     assert smem.dtype == "float" and len(smem.extents) == 1, "ASSUMPTIONS 18: an Smem is a 1-D float array"
+    reg_alloc.bind_shared(smem.name)
     return [f"{INDENT}{SHARED} {ALIGN} {F32_BYTES} {PtxType.B8} {smem.name}[{smem.extents[0] * F32_BYTES}];"]
 
 
@@ -153,6 +176,24 @@ def emit_strided_loop(loop, reg_alloc: RegisterAllocator, labels: LabelAllocator
     ]
 
 
+def emit_cond(cond, reg_alloc: RegisterAllocator, labels: LabelAllocator) -> list[str]:
+    """Return the lines that run the body only for threads where the condition holds."""
+    assert not cond.else_body, "ASSUMPTIONS 21: a Cond has no else branch"
+    assert isinstance(cond.cond, BinaryExpr) and cond.cond.op == "==", "ASSUMPTIONS 21: a Cond tests one equality"
+    left_operand, left_lines = emit_expr(cond.cond.left, reg_alloc)
+    right_operand, right_lines = emit_expr(cond.cond.right, reg_alloc)
+    skip_predicate_reg = reg_alloc.new_reg('p')
+    end_label = labels.new_label(COND_END_LABEL)
+    return [
+        *left_lines,
+        *right_lines,
+        f"{INDENT}{SET_PREDICATE}.{NOT_EQUALS}{PtxType.U32} {skip_predicate_reg}, {left_operand}, {right_operand};",
+        f"{INDENT}@{skip_predicate_reg} {BRANCH} {end_label};",
+        *emit_statements(cond.body, reg_alloc, labels),
+        f"{end_label}:",
+    ]
+
+
 def emit_statements(body, reg_alloc: RegisterAllocator, labels: LabelAllocator) -> list[str]:
     """Return the PTX for every statement in a body, in order."""
     lines = []
@@ -171,7 +212,9 @@ def emit_statements(body, reg_alloc: RegisterAllocator, labels: LabelAllocator) 
             case WarpShuffle():
                 lines += emit_warp_shuffle(stmt, reg_alloc)
             case Smem():
-                lines += emit_smem(stmt)
+                lines += emit_smem(stmt, reg_alloc)
+            case Cond():
+                lines += emit_cond(stmt, reg_alloc, labels)
             case Sync():
                 lines += emit_sync(stmt)
             case _:

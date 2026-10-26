@@ -1,7 +1,7 @@
 """Index and address math: turn IR index expressions into PTX operands and addresses."""
 
 from emmy.compiler.ir.expr import BinaryExpr, Literal, Var
-from ptxgen.consts import ADD, BINARY_OPS, INDENT, MULTIPLY_WIDE
+from ptxgen.consts import ADD, BINARY_OPS, INDENT, MOVE, MULTIPLY_WIDE
 from ptxgen.regs import RegisterAllocator
 from ptxgen.types import PtxType
 
@@ -40,4 +40,18 @@ def emit_element_address(tensor_name, index_expr, bytes_per_element, reg_alloc):
         *index_lines,
         f"{INDENT}{MULTIPLY_WIDE}{PtxType.U32} {offset_reg}, {index_operand}, {bytes_per_element};",
         f"{INDENT}{ADD}{PtxType.U64} {address_reg}, {base_reg}, {offset_reg};",
+    ]
+
+
+def emit_shared_address(array_name, index_expr, bytes_per_element, reg_alloc):
+    """Return (address_reg, lines) for element index_expr of a shared array."""
+    index_operand, index_lines = emit_expr(index_expr, reg_alloc)
+    base_reg = reg_alloc.new_reg('r')
+    offset_reg = reg_alloc.new_reg('r')
+    address_reg = reg_alloc.new_reg('r')
+    return address_reg, [
+        *index_lines,
+        f"{INDENT}{MOVE}{PtxType.U32} {base_reg}, {array_name};",
+        f"{INDENT}{BINARY_OPS['*']}{PtxType.U32} {offset_reg}, {index_operand}, {bytes_per_element};",
+        f"{INDENT}{ADD}{PtxType.U32} {address_reg}, {base_reg}, {offset_reg};",
     ]

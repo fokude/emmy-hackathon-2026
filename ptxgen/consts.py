@@ -58,12 +58,14 @@ F32_BYTES = 4
 # --- operation modifiers ---
 LOWER_BITS = "lo"
 GREATER_EQUALS = "ge"
+NOT_EQUALS = "ne"
 
 # --- symbol names (identifiers we create in the PTX) ---
 PARAM_PREFIX = PARAM[1:] + "_"
 DONE_LABEL = "DONE"
 LOOP_LABEL = "LOOP"
 LOOP_END_LABEL = "LOOP_END"
+COND_END_LABEL = "ENDIF"
 
 # --- IR variable names ---
 LANE_VAR = "lane"

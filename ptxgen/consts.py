@@ -66,6 +66,7 @@ DONE_LABEL = "DONE"
 LOOP_LABEL = "LOOP"
 LOOP_END_LABEL = "LOOP_END"
 COND_END_LABEL = "ENDIF"
+TREE_END_LABEL = "TREE_END"
 
 # --- IR variable names ---
 LANE_VAR = "lane"

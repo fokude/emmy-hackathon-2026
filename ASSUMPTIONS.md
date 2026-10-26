@@ -26,3 +26,6 @@ where the code relies on it, so a violation fails loudly instead of producing wr
 | 19 | A `Sync` is a block-wide barrier (no `count`, not warp-only) | `emit_sync` | `assert` on `count` and `warp` |
 | 20 | A shared `Write` stores one value | `emit_shared_write` | `assert len(write.values) == 1` |
 | 21 | A `Cond` tests one equality and has no else branch | `emit_cond` | `assert` on `else_body` and `cond.op` |
+| 22 | A `TreeHalve` length is a power of two (guaranteed by the IR contract in TASK.md) | `emit_tree_halve` | `assert (length & (length - 1)) == 0` |
+| 23 | A `TreeHalve` folds one state value in a flat buffer with a block-wide barrier | `emit_tree_halve` | `assert` on `bufs`, `state`, `combine_states`, `inner`, `barrier_count` |
+| 24 | The IR's `lane` and `warp` variables are the thread's position in its warp and its warp number, which the compiler must define (they are not in the IR) | `emit_cooperative_prologue` | `reg_alloc.lookup` raises `KeyError` when a name is missing |

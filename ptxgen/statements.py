@@ -1,7 +1,7 @@
 """Translate each IR statement of a tile body into PTX lines."""
 
-from emmy.compiler.ir.kernel.ir import Smem, Sync, WarpShuffle
-from emmy.compiler.ir.expr import BinaryExpr
+from emmy.compiler.ir.expr import BinaryExpr, Var
+from emmy.compiler.ir.kernel.ir import Smem, Sync, TreeHalve, WarpShuffle
 from emmy.compiler.ir.stmt import Cond, StridedLoop
 from emmy.compiler.ir.stmt.leaves import Accum, Assign, Load, Write
 from ptxgen.address import emit_element_address, emit_expr, emit_shared_address
@@ -27,6 +27,7 @@ from ptxgen.consts import (
     SHUFFLE_BUTTERFLY,
     SHUFFLE_MAX_LANE,
     STORE,
+    TREE_END_LABEL,
     WARP_SIZE,
 )
 from ptxgen.labels import LabelAllocator
@@ -137,6 +138,53 @@ def emit_warp_shuffle(shuffle, reg_alloc: RegisterAllocator) -> list[str]:
     return lines
 
 
+def emit_tree_halve(tree, reg_alloc: RegisterAllocator, labels: LabelAllocator) -> list[str]:
+    """Return the lines that fold the per-warp totals in shared memory into slot 0, then load slot 0 into every thread."""
+    # TASK.md: TreeHalve length is a power of two, so halving never drops a value.
+    assert tree.length & (tree.length - 1) == 0, "ASSUMPTIONS 22: a TreeHalve length is a power of two"
+    assert len(tree.bufs) == len(tree.state) == len(tree.combine_states) == 1, "ASSUMPTIONS 23: a TreeHalve folds one state value"
+    assert tree.inner is None and tree.barrier_count is None, "ASSUMPTIONS 23: a TreeHalve uses a flat buffer and a block-wide barrier"
+    ptx_type, reg_kind = DTYPE_INFO[tree.dtype.name]
+    smem_name = tree.bufs[0]
+    # tid_var names the IR variable that is this thread's index into the slots ('warp' here).
+    # emit_cooperative_prologue defined it, so the lookup returns the register holding the warp number.
+    tid_reg = reg_alloc.lookup(tree.tid_var)
+    acc_reg = reg_alloc.lookup(tree.state[0])
+    partner_acc_reg = reg_alloc.new_reg(reg_kind)
+    # the merge rule refers to the partner's value by this IR name, so it must resolve to partner_acc_reg
+    reg_alloc.bind(tree.state_b[0], partner_acc_reg)
+    idle_warp_predicate_reg = reg_alloc.new_reg('p')
+    combine = tree.combine_states[0]
+    operands = [reg_alloc.lookup(arg) for arg in combine.args]
+    # the address of my own slot does not change between steps
+    slot_address_reg, lines = emit_shared_address(smem_name, Var(name=tree.tid_var), tree.dtype.nbytes, reg_alloc)
+
+    # runs at compile time: one copy of the step's PTX per halving (offset 2, then 1), so the output has no loop
+    partner_offset = tree.length // 2
+    while partner_offset >= 1:
+        end_label = labels.new_label(TREE_END_LABEL)
+        partner_byte_offset = partner_offset * tree.dtype.nbytes
+        lines += [
+            f"{INDENT}{SET_PREDICATE}.{GREATER_EQUALS}{PtxType.U32} {idle_warp_predicate_reg}, {tid_reg}, {partner_offset};",
+            f"{INDENT}@{idle_warp_predicate_reg} {BRANCH} {end_label};",
+            f"{INDENT}{LOAD}{SHARED}{ptx_type} {acc_reg}, [{slot_address_reg}];",
+            f"{INDENT}{LOAD}{SHARED}{ptx_type} {partner_acc_reg}, [{slot_address_reg}+{partner_byte_offset}];",
+            format_op_line(combine.op.name, ptx_type, acc_reg, operands),
+            f"{INDENT}{STORE}{SHARED}{ptx_type} [{slot_address_reg}], {acc_reg};",
+            f"{end_label}:",
+            f"{INDENT}{BARRIER_SYNC} {tree.barrier_id};",
+        ]
+        partner_offset //= 2
+
+    # broadcast: every thread loads the total from slot 0, in place
+    root_address_reg = reg_alloc.new_reg('r')
+    lines += [
+        f"{INDENT}{MOVE}{PtxType.U32} {root_address_reg}, {smem_name};",
+        f"{INDENT}{LOAD}{SHARED}{ptx_type} {acc_reg}, [{root_address_reg}];",
+    ]
+    return lines
+
+
 def emit_smem(smem, reg_alloc: RegisterAllocator) -> list[str]:
     """Return the .shared declaration for a block-wide array of floats, sized in bytes."""
     assert smem.dtype == "float" and len(smem.extents) == 1, "ASSUMPTIONS 18: an Smem is a 1-D float array"
@@ -215,6 +263,8 @@ def emit_statements(body, reg_alloc: RegisterAllocator, labels: LabelAllocator) 
                 lines += emit_smem(stmt, reg_alloc)
             case Cond():
                 lines += emit_cond(stmt, reg_alloc, labels)
+            case TreeHalve():
+                lines += emit_tree_halve(stmt, reg_alloc, labels)
             case Sync():
                 lines += emit_sync(stmt)
             case _:

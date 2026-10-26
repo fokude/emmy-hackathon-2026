@@ -19,8 +19,7 @@ def parse_args():
     Exits with a message on a missing, unreadable or malformed file.
     """
     if len(sys.argv) < 2:
-        print("usage: ./venv/bin/python compile.py ./problems/<problem>/<problem>.ir.json")
-        sys.exit(0)
+        sys.exit("usage: python compile.py path/to/kernel.ir.json")
 
     ir_path = Path(sys.argv[1]).resolve()
     meta_path = ir_path.with_name("meta.json")
@@ -52,10 +51,3 @@ def print_header():
 
 if __name__ == "__main__":
     main()
-
-"""
-tile = problem_graph.nodes["add"].op.body[0]
-for stmt in tile.body:
-    continue
-    print(type(stmt).__name__)
-"""

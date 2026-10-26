@@ -29,12 +29,15 @@ def emit_expr(expr, reg_alloc: RegisterAllocator) -> tuple[str, list[str]]:
 
 def emit_element_address(tensor_name, index_expr, bytes_per_element, reg_alloc):
     """Return (address_reg, lines) for element index_expr of a tensor."""
-    index_operand, lines = emit_expr(index_expr, reg_alloc)
+    index_operand, index_lines = emit_expr(index_expr, reg_alloc)
+    base_reg = reg_alloc.lookup_tensor(tensor_name)
+    if index_operand == "0":
+        return base_reg, index_lines
+    # address = base address of the tensor + byte offset of the element
     offset_reg = reg_alloc.new_reg('rd')
     address_reg = reg_alloc.new_reg('rd')
-    base_reg = reg_alloc.lookup_tensor(tensor_name)
-    lines += [
+    return address_reg, [
+        *index_lines,
         f"{INDENT}{MULTIPLY_WIDE}{PtxType.U32} {offset_reg}, {index_operand}, {bytes_per_element};",
         f"{INDENT}{ADD}{PtxType.U64} {address_reg}, {base_reg}, {offset_reg};",
     ]
-    return address_reg, lines

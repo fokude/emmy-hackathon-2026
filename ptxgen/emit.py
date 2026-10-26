@@ -126,6 +126,8 @@ def emit_expr(expr, reg_alloc: RegisterAllocator) -> tuple[str, list[str]]:
         case BinaryExpr(op=op, left=left, right=right):
             left_operand, left_lines = emit_expr(left, reg_alloc)
             right_operand, right_lines = emit_expr(right, reg_alloc)
+            if op == "+" and right_operand == "0":
+                return left_operand, left_lines
             result_reg = reg_alloc.new_reg('r')
             instruction = BINARY_OPS[op]
             line = f"{INDENT}{instruction}{PtxType.U32} {result_reg}, {left_operand}, {right_operand};"

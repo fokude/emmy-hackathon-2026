@@ -14,7 +14,7 @@ where the code relies on it, so a violation fails loudly instead of producing wr
 | 7 | The launch is one-dimensional (`ctaid.x`, `ntid.x`, `tid.x`) | `emit_prologue` | `assert` on `grid` and `block` in `emit_kernel` |
 | 8 | Every dtype is `f32` | `emit_load`, `emit_assign`, `emit_write` | `DTYPE_INFO[...]` raises `KeyError` on any other dtype |
 | 9 | A tile with `block_threads` `None` is the scalar tier, so the axis variable equals the global thread id | `emit_prologue` | `emit_kernel_body` picks the prologue from `tile.block_threads` |
-| 10 | A `Load` index has exactly one expression; a `Write` index has zero (a single-element tensor) or one | `emit_load`, `emit_global_write`, `emit_shared_write` | `assert` on `len(index)` in each |
+| 10 | A `Load` or global `Write` index has one expression per tensor dimension (row-major layout); a `Write` to a single-element tensor may have none; a shared `Write` has exactly one | `emit_flat_index`, `emit_global_write`, `emit_shared_write` | `assert` on `len(index)` in `emit_flat_index` and `emit_shared_write` |
 | 11 | A `Load` defines exactly one value (no vector loads) | `emit_load` | `assert len(load.names) == 1` |
 | 12 | A global `Write` stores 1, 2 or 4 values (scalar or vector store) | `emit_global_write` | `assert len(write.values) in (1, 2, 4)` |
 | 13 | Inputs contain no NaN, because `max.f32` returns the non-NaN operand so `relu(NaN)` becomes 0 where PyTorch keeps NaN | `ELEMENTWISE_OPS` (`relu`) | not checkable at compile time |

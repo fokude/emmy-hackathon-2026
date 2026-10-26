@@ -22,6 +22,7 @@ class RegisterAllocator:
         self.counter = defaultdict(int)
         self.value_name_to_reg: dict[str, str] = {}  # value name (Load/Assign result) -> register name
         self.tensor_to_reg: dict[str, str] = {}  # tensor name (kernel argument) -> base address register
+        self.tensor_to_shape: dict[str, list[int]] = {}  # tensor name -> shape, from meta.json
         self.shared_arrays: set[str] = set()  # names of Smem arrays declared so far
 
     def new_reg(self, kind: str) -> str:
@@ -46,9 +47,16 @@ class RegisterAllocator:
             raise KeyError(f"IR value '{value_name}' used before it was defined")
         return self.value_name_to_reg[value_name]
 
-    def bind_tensor(self, tensor_name: str, reg: str) -> None:
-        """Record that the base address of tensor_name lives in register reg."""
+    def bind_tensor(self, tensor_name: str, reg: str, shape: list[int]) -> None:
+        """Record that the base address of tensor_name lives in register reg, and its shape."""
         self.tensor_to_reg[tensor_name] = reg
+        self.tensor_to_shape[tensor_name] = shape
+
+    def lookup_shape(self, tensor_name: str) -> list[int]:
+        """Return the shape of tensor_name, or raise KeyError."""
+        if tensor_name not in self.tensor_to_shape:
+            raise KeyError(f"tensor '{tensor_name}' has no shape recorded")
+        return self.tensor_to_shape[tensor_name]
 
     def lookup_tensor(self, tensor_name: str) -> str:
         """Return the base address register of tensor_name, or raise KeyError."""

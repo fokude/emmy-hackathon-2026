@@ -38,9 +38,8 @@ from ptxgen.types import DTYPE_INFO, PtxType, f32_literal
 def emit_load(load, reg_alloc: RegisterAllocator) -> list[str]:
     """Return the lines that load one tensor element into a new register."""
     assert len(load.names) == 1, "ASSUMPTIONS 11: a Load defines exactly one value"
-    assert len(load.index) == 1, "ASSUMPTIONS 10: a Load index has exactly one expression"
     ptx_type, reg_kind = DTYPE_INFO[load.dtype.name]
-    address_reg, lines = emit_element_address(load.input, load.index[0], load.dtype.nbytes, reg_alloc)
+    address_reg, lines = emit_element_address(load.input, load.index, load.dtype.nbytes, reg_alloc)
     value_reg = reg_alloc.new_reg(reg_kind)
     lines.append(f"{INDENT}{LOAD}{GLOBAL}{ptx_type} {value_reg}, [{address_reg}];")
     reg_alloc.bind(load.names[0], value_reg)
@@ -71,11 +70,10 @@ def emit_write(write, reg_alloc: RegisterAllocator) -> list[str]:
 
 def emit_global_write(write, reg_alloc: RegisterAllocator) -> list[str]:
     """Return the lines that store 1, 2 or 4 values to an output tensor in global memory."""
-    assert len(write.index) in (0, 1), "ASSUMPTIONS 10: a Write index has zero (single-element tensor) or one expression"
     assert len(write.values) in (1, 2, 4), "ASSUMPTIONS 12: a global Write stores 1, 2 or 4 values"
     ptx_type, _ = DTYPE_INFO[write.value_dtype.name]
     if write.index:
-        address_reg, lines = emit_element_address(write.output, write.index[0], write.value_dtype.nbytes, reg_alloc)
+        address_reg, lines = emit_element_address(write.output, write.index, write.value_dtype.nbytes, reg_alloc)
     else:
         address_reg, lines = reg_alloc.lookup_tensor(write.output), []
     value_regs = [reg_alloc.lookup(name) for name in write.values]

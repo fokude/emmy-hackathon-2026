@@ -27,9 +27,28 @@ def emit_expr(expr, reg_alloc: RegisterAllocator) -> tuple[str, list[str]]:
             raise NotImplementedError(f"expression {type(expr).__name__}")
 
 
-def emit_element_address(tensor_name, index_expr, bytes_per_element, reg_alloc):
-    """Return (address_reg, lines) for element index_expr of a tensor."""
-    index_operand, index_lines = emit_expr(index_expr, reg_alloc)
+def emit_flat_index(tensor_name, index_exprs, reg_alloc):
+    """Return (operand, lines) for the flat position of a multi-dimensional index, row-major."""
+    shape = reg_alloc.lookup_shape(tensor_name)
+    assert len(index_exprs) == len(shape), "ASSUMPTIONS 10: an index has one expression per tensor dimension"
+    flat_operand, lines = emit_expr(index_exprs[0], reg_alloc)
+    # extra indices (2-D and up): position = position * next dimension's length + next index
+    for expr, extent in zip(index_exprs[1:], shape[1:]):
+        next_operand, next_lines = emit_expr(expr, reg_alloc)
+        scaled_reg = reg_alloc.new_reg('r')
+        result_reg = reg_alloc.new_reg('r')
+        lines += [
+            *next_lines,
+            f"{INDENT}{BINARY_OPS['*']}{PtxType.U32} {scaled_reg}, {flat_operand}, {extent};",
+            f"{INDENT}{ADD}{PtxType.U32} {result_reg}, {scaled_reg}, {next_operand};",
+        ]
+        flat_operand = result_reg
+    return flat_operand, lines
+
+
+def emit_element_address(tensor_name, index_exprs, bytes_per_element, reg_alloc):
+    """Return (address_reg, lines) for the element of a tensor at index_exprs."""
+    index_operand, index_lines = emit_flat_index(tensor_name, index_exprs, reg_alloc)
     base_reg = reg_alloc.lookup_tensor(tensor_name)
     if index_operand == "0":
         return base_reg, index_lines

@@ -107,12 +107,13 @@ def emit_params(arg_names: list[str], kernel: dict) -> list[str]:
 def emit_param_loads(kernel: dict, reg_alloc: RegisterAllocator) -> list[str]:
     """Return the lines that load each argument's address into a global-space register."""
     lines = []
+    shapes = {arg["name"]: arg["shape"] for arg in kernel["args"]}
     for arg_name in kernel["arg_order"]:
         param_reg = reg_alloc.new_reg('rd')
         global_reg = reg_alloc.new_reg('rd')
         lines.append(f"{INDENT}{LOAD}{PARAM}{PtxType.U64} {param_reg}, [{PARAM_PREFIX}{arg_name}];")
         lines.append(f"{INDENT}{CONVERT_ADDRESS}.to{GLOBAL}{PtxType.U64} {global_reg}, {param_reg};")
-        reg_alloc.bind_tensor(arg_name, global_reg)
+        reg_alloc.bind_tensor(arg_name, global_reg, shapes[arg_name])
     return lines
 
 

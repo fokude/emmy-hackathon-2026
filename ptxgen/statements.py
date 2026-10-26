@@ -34,15 +34,19 @@ def emit_load(load, reg_alloc: RegisterAllocator) -> list[str]:
     return lines
 
 
+def format_op_line(op_name: str, ptx_type: str, dest_reg: str, operand_regs: list[str]) -> str:
+    """Return the instruction line that applies an elementwise op to operand_regs and writes dest_reg."""
+    instruction, extra_operands = ELEMENTWISE_OPS[op_name]
+    return f"{INDENT}{instruction}{ptx_type} {dest_reg}, {', '.join(operand_regs + extra_operands)};"
+
+
 def emit_assign(assign, reg_alloc: RegisterAllocator) -> list[str]:
     """Return the line that applies an elementwise op to registers into a new register."""
     ptx_type, reg_kind = DTYPE_INFO[assign.dtype.name]
     operands = [reg_alloc.lookup(arg) for arg in assign.args]
     result_reg = reg_alloc.new_reg(reg_kind)
-    instruction, extra_operands = ELEMENTWISE_OPS[assign.op.name]
-    line = f"{INDENT}{instruction}{ptx_type} {result_reg}, {', '.join(operands + extra_operands)};"
     reg_alloc.bind(assign.name, result_reg)
-    return [line]
+    return [format_op_line(assign.op.name, ptx_type, result_reg, operands)]
 
 
 def emit_write(write, reg_alloc: RegisterAllocator) -> list[str]:
@@ -76,8 +80,7 @@ def emit_accum(accum, reg_alloc: RegisterAllocator) -> list[str]:
     ptx_type, _ = DTYPE_INFO[accum.dtype.name]
     acc_reg = reg_alloc.lookup(accum.name)
     value_reg = reg_alloc.lookup(accum.value)
-    instruction, _ = ELEMENTWISE_OPS[accum.op.name]
-    return [f"{INDENT}{instruction}{ptx_type} {acc_reg}, {acc_reg}, {value_reg};"]
+    return [format_op_line(accum.op.name, ptx_type, acc_reg, [acc_reg, value_reg])]
 
 
 def emit_strided_loop(loop, reg_alloc: RegisterAllocator, labels: LabelAllocator) -> list[str]:

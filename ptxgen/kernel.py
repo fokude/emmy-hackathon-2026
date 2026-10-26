@@ -20,6 +20,7 @@ from ptxgen.consts import (
     MULTIPLY_ADD,
     LOWER_BITS,
 )
+from ptxgen.labels import LabelAllocator
 from ptxgen.regs import RegisterAllocator
 from ptxgen.statements import emit_statements
 from ptxgen.types import PtxType
@@ -59,10 +60,17 @@ def emit_kernel_body(graph: Graph, kernel: dict, reg_alloc: RegisterAllocator) -
     body = graph.nodes[kernel["node"]].op.body
     assert len(body) == 1 and isinstance(body[0], Tile), "ASSUMPTIONS 4: kernel body must be a single Tile"
     tile = body[0]
+    # block_threads is None for a scalar tile (one thread per cell, axis = global thread id).
+    # A number means a cooperative tile: that many threads work together on one result.
+    if tile.block_threads is None:
+        prologue = emit_prologue(tile, reg_alloc)
+    else:
+        prologue = emit_cooperative_prologue(tile, kernel, reg_alloc)
+    labels = LabelAllocator()
     return [
-        *emit_prologue(tile, reg_alloc),
+        *prologue,
         *emit_param_loads(kernel, reg_alloc),
-        *emit_statements(tile, reg_alloc),
+        *emit_statements(tile.body, reg_alloc, labels),
         f"{DONE_LABEL}:",
         f"{INDENT}ret;",
     ]
@@ -109,15 +117,15 @@ def emit_prologue(tile, reg_alloc):
     Threads whose id is at or past the tile extent branch to DONE.
     """
     assert len(tile.axes) == 1, "ASSUMPTIONS 5: a Tile has exactly one axis"
-    assert tile.block_threads is None, "ASSUMPTIONS 9: cooperative tiles are not supported"
 
     block_id_reg = reg_alloc.new_reg('r')
     num_threads_reg = reg_alloc.new_reg('r')
     thread_id_reg = reg_alloc.new_reg('r')
     gid_reg = reg_alloc.new_reg('r')
-    thread_boundary_reg = reg_alloc.new_reg('p')
+    out_of_range_predicate_reg = reg_alloc.new_reg('p')
 
     axis = tile.axes[0]
+    extent = axis.extent.as_static()
     # Emmy's Tile runs one thread per axis value, so the axis variable (a0)
     # is the global thread id. Record that for the body's index expressions.
     reg_alloc.bind(axis.name, gid_reg)
@@ -127,6 +135,23 @@ def emit_prologue(tile, reg_alloc):
         f"{INDENT}{MOVE}{PtxType.U32} {num_threads_reg}, %ntid.x;",
         f"{INDENT}{MOVE}{PtxType.U32} {thread_id_reg}, %tid.x;",
         f"{INDENT}{MULTIPLY_ADD}.{LOWER_BITS}{PtxType.U32} {gid_reg}, {block_id_reg}, {num_threads_reg}, {thread_id_reg};",
-        f"{INDENT}{SET_PREDICATE}.{GREATER_EQUALS}{PtxType.U32} {thread_boundary_reg}, {gid_reg}, {tile.axes[0].extent.as_static()};",
-        f"{INDENT}@{thread_boundary_reg} {BRANCH} {DONE_LABEL};",
+        f"{INDENT}{SET_PREDICATE}.{GREATER_EQUALS}{PtxType.U32} {out_of_range_predicate_reg}, {gid_reg}, {extent};",
+        f"{INDENT}@{out_of_range_predicate_reg} {BRANCH} {DONE_LABEL};",
     ]
+
+
+def emit_cooperative_prologue(tile, kernel, reg_alloc):
+    """Return the line that reads the thread id for a cooperative tile.
+
+    The launch is one block whose size equals the axis extent, so the axis
+    variable (a0_co) is tid.x and no bounds guard is needed.
+    """
+    assert len(tile.axes) == 1, "ASSUMPTIONS 5: a Tile has exactly one axis"
+    axis = tile.axes[0]
+    assert kernel["grid"] == [1, 1, 1], "ASSUMPTIONS 14: a cooperative tile launches exactly one block"
+    assert kernel["block"][0] == axis.extent.as_static(), "ASSUMPTIONS 14: block size equals the cooperative axis extent"
+
+    thread_id_reg = reg_alloc.new_reg('r')
+    reg_alloc.bind(axis.name, thread_id_reg)
+
+    return [f"{INDENT}{MOVE}{PtxType.U32} {thread_id_reg}, %tid.x;"]

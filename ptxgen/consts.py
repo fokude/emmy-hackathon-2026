@@ -45,6 +45,8 @@ GREATER_EQUALS = "ge"
 # --- symbol names (identifiers we create in the PTX) ---
 PARAM_PREFIX = PARAM[1:] + "_"
 DONE_LABEL = "DONE"
+LOOP_LABEL = "LOOP"
+LOOP_END_LABEL = "LOOP_END"
 
 # --- formatting ---
 TAB_SPACE = 2

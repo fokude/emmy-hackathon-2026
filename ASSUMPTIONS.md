@@ -13,8 +13,10 @@ where the code relies on it, so a violation fails loudly instead of producing wr
 | 6 | The axis extent is a static integer | `emit_prologue` | `Dim.as_static()` raises `TypeError` |
 | 7 | The launch is one-dimensional (`ctaid.x`, `ntid.x`, `tid.x`) | `emit_prologue` | `assert` on `grid` and `block` in `emit_kernel` |
 | 8 | Every dtype is `f32` | `emit_load`, `emit_assign`, `emit_write` | `DTYPE_INFO[...]` raises `KeyError` on any other dtype |
-| 9 | The tile is the scalar tier (`block_threads` is `None`), so the axis variable equals the global thread id | `emit_prologue` | `assert tile.block_threads is None` |
+| 9 | A tile with `block_threads` `None` is the scalar tier, so the axis variable equals the global thread id | `emit_prologue` | `emit_kernel_body` picks the prologue from `tile.block_threads` |
 | 10 | `Load` and `Write` indices have exactly one expression (1-D tensors) | `emit_load`, `emit_write` | `assert len(load.index) == 1` in `emit_load` (`emit_write` likewise) |
 | 11 | A `Load` defines exactly one value (no vector loads) | `emit_load` | `assert len(load.names) == 1` |
 | 12 | A `Write` stores 2 or 4 values (vector store, no scalar store) | `emit_write` | `assert len(write.values) in (2, 4)` |
 | 13 | Inputs contain no NaN, because `max.f32` returns the non-NaN operand so `relu(NaN)` becomes 0 where PyTorch keeps NaN | `ELEMENTWISE_OPS` (`relu`) | not checkable at compile time |
+| 14 | Cooperative tiles are supported only in the r01 to r03 shape: one axis, one block, block size equals the axis extent (r04 adds a `ctaid.x` row axis later) | `emit_cooperative_prologue` | `assert` on `grid` and `block` |
+| 15 | A `StridedLoop` stops at its axis extent (`end` is `None`) | `emit_strided_loop` | `assert loop.end is None` |

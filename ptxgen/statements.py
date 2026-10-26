@@ -1,10 +1,25 @@
 """Translate each IR statement of a tile body into PTX lines."""
 
+from emmy.compiler.ir.stmt import StridedLoop
 from emmy.compiler.ir.stmt.leaves import Assign, Load, Write
-from ptxgen.address import emit_element_address
-from ptxgen.consts import ELEMENTWISE_OPS, GLOBAL, INDENT, LOAD, STORE
+from ptxgen.address import emit_element_address, emit_expr
+from ptxgen.consts import (
+    ADD,
+    BRANCH,
+    ELEMENTWISE_OPS,
+    GLOBAL,
+    GREATER_EQUALS,
+    INDENT,
+    LOAD,
+    LOOP_END_LABEL,
+    LOOP_LABEL,
+    MOVE,
+    SET_PREDICATE,
+    STORE,
+)
+from ptxgen.labels import LabelAllocator
 from ptxgen.regs import RegisterAllocator
-from ptxgen.types import DTYPE_INFO
+from ptxgen.types import DTYPE_INFO, PtxType
 
 
 def emit_load(load, reg_alloc: RegisterAllocator) -> list[str]:
@@ -43,10 +58,35 @@ def emit_write(write, reg_alloc: RegisterAllocator) -> list[str]:
     return lines
 
 
-def emit_statements(tile, reg_alloc: RegisterAllocator) -> list[str]:
-    """Return the PTX for every statement in the tile body, in order."""
+def emit_strided_loop(loop, reg_alloc: RegisterAllocator, labels: LabelAllocator) -> list[str]:
+    """Return the lines for a loop whose variable starts at loop.start and grows by loop.step."""
+    assert loop.end is None, "ASSUMPTIONS 15: a StridedLoop stops at its axis extent (end is None)"
+    start_operand, start_lines = emit_expr(loop.start, reg_alloc)
+    step_operand, step_lines = emit_expr(loop.step, reg_alloc)
+    extent = loop.axis.extent.as_static()
+    counter_reg = reg_alloc.new_reg('r')
+    exit_predicate_reg = reg_alloc.new_reg('p')
+    loop_label = labels.new_label(LOOP_LABEL)
+    end_label = labels.new_label(LOOP_END_LABEL)
+    reg_alloc.bind(loop.axis.name, counter_reg)
+    return [
+        *start_lines,
+        *step_lines,
+        f"{INDENT}{MOVE}{PtxType.U32} {counter_reg}, {start_operand};",
+        f"{loop_label}:",
+        f"{INDENT}{SET_PREDICATE}.{GREATER_EQUALS}{PtxType.U32} {exit_predicate_reg}, {counter_reg}, {extent};",
+        f"{INDENT}@{exit_predicate_reg} {BRANCH} {end_label};",
+        *emit_statements(loop.body, reg_alloc, labels),
+        f"{INDENT}{ADD}{PtxType.U32} {counter_reg}, {counter_reg}, {step_operand};",
+        f"{INDENT}{BRANCH} {loop_label};",
+        f"{end_label}:",
+    ]
+
+
+def emit_statements(body, reg_alloc: RegisterAllocator, labels: LabelAllocator) -> list[str]:
+    """Return the PTX for every statement in a body, in order."""
     lines = []
-    for stmt in tile.body:
+    for stmt in body:
         match stmt:
             case Load():
                 lines += emit_load(stmt, reg_alloc)
@@ -54,6 +94,8 @@ def emit_statements(tile, reg_alloc: RegisterAllocator) -> list[str]:
                 lines += emit_assign(stmt, reg_alloc)
             case Write():
                 lines += emit_write(stmt, reg_alloc)
+            case StridedLoop():
+                lines += emit_strided_loop(stmt, reg_alloc, labels)
             case _:
                 raise NotImplementedError(f"statement {type(stmt).__name__}")
     return lines

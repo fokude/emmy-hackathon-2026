@@ -38,6 +38,16 @@ MULTIPLY_ADD = "mad"
 SET_PREDICATE = "setp"
 BRANCH = "bra"
 
+# shfl.sync.bfly: lane i reads the register of lane (i XOR lane_mask), within the same warp
+SHUFFLE_BUTTERFLY = "shfl.sync.bfly"
+# shfl operand c: lanes may read from lane numbers 0 to this value (0x1f = 31, the whole warp), so no read is blocked.
+# PTX manual name: clamp.
+SHUFFLE_MAX_LANE = "0x1f"
+# bit i set = lane i must take part in the shuffle; all 32 bits set = the full warp
+FULL_WARP_MASK = "0xffffffff"
+# lanes (threads) per warp
+WARP_SIZE = 32
+
 # --- operation modifiers ---
 LOWER_BITS = "lo"
 GREATER_EQUALS = "ge"

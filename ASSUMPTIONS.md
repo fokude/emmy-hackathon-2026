@@ -21,3 +21,4 @@ where the code relies on it, so a violation fails loudly instead of producing wr
 | 14 | Cooperative tiles are supported only in the r01 to r03 shape: one axis, one block, block size equals the axis extent (r04 adds a `ctaid.x` row axis later) | `emit_cooperative_prologue` | `assert` on `grid` and `block` |
 | 15 | A `StridedLoop` stops at its axis extent (`end` is `None`) | `emit_strided_loop` | `assert loop.end is None` |
 | 16 | A `StridedLoop` has `seed` True | `emit_accum_seeds` | `assert loop.seed` |
+| 17 | A `WarpShuffle` spans one full warp (`length` 32) and combines one state value | `emit_warp_shuffle` | `assert` on `length`, `state` and `combine_states` |

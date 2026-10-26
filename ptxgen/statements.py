@@ -1,5 +1,6 @@
 """Translate each IR statement of a tile body into PTX lines."""
 
+from emmy.compiler.ir.kernel.ir import WarpShuffle
 from emmy.compiler.ir.stmt import StridedLoop
 from emmy.compiler.ir.stmt.leaves import Accum, Assign, Load, Write
 from ptxgen.address import emit_element_address, emit_expr
@@ -7,6 +8,7 @@ from ptxgen.consts import (
     ADD,
     BRANCH,
     ELEMENTWISE_OPS,
+    FULL_WARP_MASK,
     GLOBAL,
     GREATER_EQUALS,
     INDENT,
@@ -15,7 +17,10 @@ from ptxgen.consts import (
     LOOP_LABEL,
     MOVE,
     SET_PREDICATE,
+    SHUFFLE_BUTTERFLY,
+    SHUFFLE_MAX_LANE,
     STORE,
+    WARP_SIZE,
 )
 from ptxgen.labels import LabelAllocator
 from ptxgen.regs import RegisterAllocator
@@ -83,6 +88,29 @@ def emit_accum(accum, reg_alloc: RegisterAllocator) -> list[str]:
     return [format_op_line(accum.op.name, ptx_type, acc_reg, [acc_reg, value_reg])]
 
 
+def emit_warp_shuffle(shuffle, reg_alloc: RegisterAllocator) -> list[str]:
+    """Return the lines that combine state across the 32 lanes of a warp, halving the lane mask from 16 to 1."""
+    assert shuffle.length == WARP_SIZE, "ASSUMPTIONS 17: a WarpShuffle spans exactly one warp (32 lanes)"
+    assert len(shuffle.state) == 1 and len(shuffle.combine_states) == 1, "ASSUMPTIONS 17: a WarpShuffle has one state value"
+    ptx_type, reg_kind = DTYPE_INFO[shuffle.dtype.name]
+    acc_reg = reg_alloc.lookup(shuffle.state[0])
+    lane_partner_acc_reg = reg_alloc.new_reg(reg_kind)
+    reg_alloc.bind(shuffle.state_b[0], lane_partner_acc_reg)
+    combine = shuffle.combine_states[0]
+    operands = [reg_alloc.lookup(arg) for arg in combine.args]
+
+    lines = []
+    # lane_mask 16, 8, 4, 2, 1: each step flips one bit of the lane number, so after 5 steps every lane has seen all 32
+    lane_mask = shuffle.length // 2
+    while lane_mask >= 1:
+        lines += [
+            f"{INDENT}{SHUFFLE_BUTTERFLY}{PtxType.B32} {lane_partner_acc_reg}, {acc_reg}, {lane_mask}, {SHUFFLE_MAX_LANE}, {FULL_WARP_MASK};",
+            format_op_line(combine.op.name, ptx_type, acc_reg, operands),
+        ]
+        lane_mask //= 2
+    return lines
+
+
 def emit_strided_loop(loop, reg_alloc: RegisterAllocator, labels: LabelAllocator) -> list[str]:
     """Return the lines for a loop whose variable starts at loop.start and grows by loop.step."""
     assert loop.end is None, "ASSUMPTIONS 15: a StridedLoop stops at its axis extent (end is None)"
@@ -124,6 +152,8 @@ def emit_statements(body, reg_alloc: RegisterAllocator, labels: LabelAllocator) 
                 lines += emit_accum(stmt, reg_alloc)
             case StridedLoop():
                 lines += emit_strided_loop(stmt, reg_alloc, labels)
+            case WarpShuffle():
+                lines += emit_warp_shuffle(stmt, reg_alloc)
             case _:
                 raise NotImplementedError(f"statement {type(stmt).__name__}")
     return lines

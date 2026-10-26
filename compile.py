@@ -4,7 +4,7 @@ import sys
 import json
 from pathlib import Path
 from emmy.compiler.graph import Graph
-from ptxgen.emit import emit_graph
+from ptxgen import emit_graph
 
 def main():
     """Print the PTX header, then the PTX for every kernel in the problem."""
